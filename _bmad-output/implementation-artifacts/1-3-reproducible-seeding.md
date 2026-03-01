@@ -1,6 +1,6 @@
 # Story 1.3: Reproducible Seeding
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -18,20 +18,20 @@ So that my training and evaluation runs are reproducible.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `seed.py` — `set_all_seeds(seed: int) -> None` function (AC: #1)
-  - [ ] Call `random.seed(seed)` (Python stdlib)
-  - [ ] Call `numpy.random.seed(seed)`
-  - [ ] Call `torch.manual_seed(seed)`
-  - [ ] If `torch.cuda.is_available()`: call `torch.cuda.manual_seed_all(seed)`, set `torch.backends.cudnn.deterministic = True`, set `torch.backends.cudnn.benchmark = False`
-  - [ ] Log the seed value being set via `logging.getLogger(__name__)`
-  - [ ] Add comment documenting that engine seeding is not available (no seed endpoint in current game engine) and `PYTHONHASHSEED` limitation
-- [ ] Task 2: Write tests `tests/test_seed.py` (AC: #1, #2)
-  - [ ] Test that `set_all_seeds(42)` results in `numpy.random.random()` producing the same value on repeated calls with same seed
-  - [ ] Test that `set_all_seeds(42)` results in `torch.rand(1)` producing the same value on repeated calls with same seed
-  - [ ] Test that `set_all_seeds(42)` results in `random.random()` producing the same value on repeated calls with same seed
-  - [ ] Test that two separate calls with different seeds produce different numpy random values
-  - [ ] Test that `seed=0` works correctly (edge case)
-  - [ ] Test that logging output includes the seed value (use `caplog` fixture)
+- [x] Task 1: Create `seed.py` — `set_all_seeds(seed: int) -> None` function (AC: #1)
+  - [x] Call `random.seed(seed)` (Python stdlib)
+  - [x] Call `numpy.random.seed(seed)`
+  - [x] Call `torch.manual_seed(seed)`
+  - [x] If `torch.cuda.is_available()`: call `torch.cuda.manual_seed_all(seed)`, set `torch.backends.cudnn.deterministic = True`, set `torch.backends.cudnn.benchmark = False`
+  - [x] Log the seed value being set via `logging.getLogger(__name__)`
+  - [x] Add comment documenting that engine seeding is not available (no seed endpoint in current game engine) and `PYTHONHASHSEED` limitation
+- [x] Task 2: Write tests `tests/test_seed.py` (AC: #1, #2)
+  - [x] Test that `set_all_seeds(42)` results in `numpy.random.random()` producing the same value on repeated calls with same seed
+  - [x] Test that `set_all_seeds(42)` results in `torch.rand(1)` producing the same value on repeated calls with same seed
+  - [x] Test that `set_all_seeds(42)` results in `random.random()` producing the same value on repeated calls with same seed
+  - [x] Test that two separate calls with different seeds produce different numpy random values
+  - [x] Test that `seed=0` works correctly (edge case)
+  - [x] Test that logging output includes the seed value (use `caplog` fixture)
 
 ## Dev Notes
 
@@ -150,10 +150,25 @@ Alignment with architecture.md project structure: exact match. `seed.py` is at t
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.6
 
 ### Debug Log References
 
+None — clean implementation, no issues encountered.
+
 ### Completion Notes List
 
+- Implemented `seed.py` at project root with `set_all_seeds(seed: int) -> None`
+- Seeds `random`, `numpy`, and `torch`; conditionally seeds CUDA and sets deterministic flags
+- Documented engine seeding limitation and `PYTHONHASHSEED` caveat as inline comments
+- 6 new tests in `tests/test_seed.py` covering reproducibility, different seeds, edge case (seed=0), and logging
+- Full suite: 79/79 tests pass (73 existing + 6 new), 0 regressions
+
+### Change Log
+
+- 2026-03-01: Implemented story 1-3-reproducible-seeding — created seed.py and tests/test_seed.py
+
 ### File List
+
+- seed.py (NEW)
+- tests/test_seed.py (NEW)
