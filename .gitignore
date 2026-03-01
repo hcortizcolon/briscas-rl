@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# External game engine (not part of this repo)
+lets-play-brisca/

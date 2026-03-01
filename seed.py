@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 def set_all_seeds(seed: int) -> None:
     """Seed all random sources for reproducible training and evaluation."""
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise TypeError(f"seed must be an int, got {type(seed).__name__}")
+    if seed < 0 or seed >= 2**32:
+        raise ValueError(f"seed must be in range [0, 2**32 - 1], got {seed}")
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

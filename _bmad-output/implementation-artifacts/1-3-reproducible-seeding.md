@@ -1,6 +1,6 @@
 # Story 1.3: Reproducible Seeding
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -25,6 +25,7 @@ So that my training and evaluation runs are reproducible.
   - [x] If `torch.cuda.is_available()`: call `torch.cuda.manual_seed_all(seed)`, set `torch.backends.cudnn.deterministic = True`, set `torch.backends.cudnn.benchmark = False`
   - [x] Log the seed value being set via `logging.getLogger(__name__)`
   - [x] Add comment documenting that engine seeding is not available (no seed endpoint in current game engine) and `PYTHONHASHSEED` limitation
+  - [x] Add input validation: `TypeError` for non-int seeds (including bool), `ValueError` for out-of-range seeds (< 0 or >= 2^32)
 - [x] Task 2: Write tests `tests/test_seed.py` (AC: #1, #2)
   - [x] Test that `set_all_seeds(42)` results in `numpy.random.random()` producing the same value on repeated calls with same seed
   - [x] Test that `set_all_seeds(42)` results in `torch.rand(1)` producing the same value on repeated calls with same seed
@@ -32,6 +33,12 @@ So that my training and evaluation runs are reproducible.
   - [x] Test that two separate calls with different seeds produce different numpy random values
   - [x] Test that `seed=0` works correctly (edge case)
   - [x] Test that logging output includes the seed value (use `caplog` fixture)
+  - [x] Test multi-element torch tensor reproducibility with same seed
+  - [x] Test CUDA branch is exercised when GPU available (mock `torch.cuda.is_available`)
+  - [x] Test CUDA branch is skipped when no GPU (mock `torch.cuda.is_available`)
+  - [x] Test negative seed raises `ValueError`
+  - [x] Test seed >= 2^32 raises `ValueError`
+  - [x] Test non-int seed raises `TypeError`
 
 ## Dev Notes
 
@@ -161,14 +168,17 @@ None — clean implementation, no issues encountered.
 - Implemented `seed.py` at project root with `set_all_seeds(seed: int) -> None`
 - Seeds `random`, `numpy`, and `torch`; conditionally seeds CUDA and sets deterministic flags
 - Documented engine seeding limitation and `PYTHONHASHSEED` caveat as inline comments
-- 6 new tests in `tests/test_seed.py` covering reproducibility, different seeds, edge case (seed=0), and logging
-- Full suite: 79/79 tests pass (73 existing + 6 new), 0 regressions
+- Added input validation: `TypeError` for non-int/bool seeds, `ValueError` for out-of-range ([0, 2^32-1])
+- 12 tests in `tests/test_seed.py` covering reproducibility, different seeds, edge case (seed=0), logging, CUDA branch mocking, and input validation
+- Full suite: 85/85 tests pass (73 existing + 12 new), 0 regressions
 
 ### Change Log
 
 - 2026-03-01: Implemented story 1-3-reproducible-seeding — created seed.py and tests/test_seed.py
+- 2026-03-01: Code review — fixed Dev Agent Record (test count 6→12, suite 79→85), documented input validation in Tasks/Subtasks, added .gitignore to File List, corrected file statuses from (NEW) to (MODIFIED)
 
 ### File List
 
-- seed.py (NEW)
-- tests/test_seed.py (NEW)
+- seed.py (MODIFIED — added input validation)
+- tests/test_seed.py (MODIFIED — added 6 tests for CUDA mocking, validation, multi-element)
+- .gitignore (MODIFIED — added lets-play-brisca/ exclusion)
