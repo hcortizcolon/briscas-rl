@@ -1,6 +1,6 @@
 # Story 1.1: Connect to Game Engine via Adapter
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -18,28 +18,28 @@ So that I can programmatically start games, play cards, and receive game state w
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `gym_env/` package structure (AC: #3)
-  - [ ] Create `gym_env/__init__.py`
-  - [ ] Create `gym_env/engine_adapter.py`
-- [ ] Task 2: Implement `EngineAdapter` abstract base class (AC: #3)
-  - [ ] Define abstract methods: `new_game()`, `play_card(card_index)`, `process_ai_turn()`, `get_state()`, `delete_game()`
-  - [ ] Define `EngineConnectionError` custom exception
-  - [ ] Define return types/dataclasses for game state responses
-- [ ] Task 3: Implement `RESTAdapter(EngineAdapter)` (AC: #1, #2)
-  - [ ] Implement `__init__(self, base_url)` with configurable engine URL (default `http://localhost:5000`)
-  - [ ] Implement `new_game()` → POST `/api/game/new` with `player_name` and `ai_difficulty="basic"` (random-equivalent)
-  - [ ] Implement `play_card(card_index)` → POST `/api/game/play` with `card_index`
-  - [ ] Implement `process_ai_turn()` → POST `/api/game/process-ai`
-  - [ ] Implement `get_state()` → GET `/api/game/state`
-  - [ ] Implement `delete_game()` → DELETE `/api/game/delete`
-  - [ ] Handle HTTP session cookies (game_id stored server-side in Flask session)
-  - [ ] Wrap all `requests` exceptions into `EngineConnectionError`
-- [ ] Task 4: Write tests (AC: #1, #2, #3)
-  - [ ] `tests/test_engine_adapter.py` — unit tests with mocked HTTP responses
-  - [ ] Test successful game lifecycle: new_game → play_card → get_state → game_over
-  - [ ] Test `EngineConnectionError` raised on connection failure
-  - [ ] Test `EngineConnectionError` raised on non-200 responses
-  - [ ] Test adapter interface contract (abstract methods defined)
+- [x] Task 1: Create `gym_env/` package structure (AC: #3)
+  - [x] Create `gym_env/__init__.py`
+  - [x] Create `gym_env/engine_adapter.py`
+- [x] Task 2: Implement `EngineAdapter` abstract base class (AC: #3)
+  - [x] Define abstract methods: `new_game()`, `play_card(card_index)`, `process_ai_turn()`, `get_state()`, `delete_game()`
+  - [x] Define `EngineConnectionError` custom exception
+  - [x] Define return types/dataclasses for game state responses
+- [x] Task 3: Implement `RESTAdapter(EngineAdapter)` (AC: #1, #2)
+  - [x] Implement `__init__(self, base_url)` with configurable engine URL (default `http://localhost:5000`)
+  - [x] Implement `new_game()` → POST `/api/game/new` with `player_name` and `ai_difficulty="basic"` (random-equivalent)
+  - [x] Implement `play_card(card_index)` → POST `/api/game/play` with `card_index`
+  - [x] Implement `process_ai_turn()` → POST `/api/game/process-ai`
+  - [x] Implement `get_state()` → GET `/api/game/state`
+  - [x] Implement `delete_game()` → DELETE `/api/game/delete`
+  - [x] Handle HTTP session cookies (game_id stored server-side in Flask session)
+  - [x] Wrap all `requests` exceptions into `EngineConnectionError`
+- [x] Task 4: Write tests (AC: #1, #2, #3)
+  - [x] `tests/test_engine_adapter.py` — unit tests with mocked HTTP responses
+  - [x] Test successful game lifecycle: new_game → play_card → get_state → game_over
+  - [x] Test `EngineConnectionError` raised on connection failure
+  - [x] Test `EngineConnectionError` raised on non-200 responses
+  - [x] Test adapter interface contract (abstract methods defined)
 
 ## Dev Notes
 
@@ -167,8 +167,34 @@ Alignment with architecture.md project structure: exact match. [Source: architec
 
 ### Agent Model Used
 
+Claude Opus 4.6
+
 ### Debug Log References
+
+None — all 19 tests passed on first run.
 
 ### Completion Notes List
 
+- Implemented `EngineAdapter` ABC with 5 abstract methods: `new_game`, `play_card`, `process_ai_turn`, `get_state`, `delete_game`
+- Implemented `RESTAdapter` concrete class using `requests.Session` for cookie persistence
+- Defined dataclasses: `Card`, `TrickCard`, `PlayerInfo`, `GameState` for typed state parsing (frozen=True for immutability)
+- Defined `EngineConnectionError` custom exception wrapping all `requests` exceptions + `ValueError` (malformed JSON) + `success: false` responses
+- All HTTP calls isolated in `gym_env/engine_adapter.py` per architecture boundary
+- Default 10s request timeout on all HTTP calls (NFR1 compliance)
+- `delete_game()` skips JSON parsing to handle empty/non-JSON responses safely
+- `__init__.py` exports all public types: `Card`, `TrickCard`, `PlayerInfo`, `GameState`, `EngineAdapter`, `RESTAdapter`, `EngineConnectionError`
+- 23 unit tests covering: ABC contract, all 5 endpoints, full game lifecycle, 6 error scenarios (connection, HTTP, timeout, non-200, malformed JSON, success:false), session persistence, custom base URL, state parsing, timeout enforcement, delete-no-json
+- Used `logging` module per architecture requirement (no print statements)
+
 ### File List
+
+- `gym_env/__init__.py` (new) — Package init, exports EngineAdapter, RESTAdapter, EngineConnectionError
+- `gym_env/engine_adapter.py` (new) — EngineAdapter ABC, RESTAdapter implementation, dataclasses, EngineConnectionError
+- `tests/__init__.py` (new) — Test package init
+- `tests/test_engine_adapter.py` (new) — 19 unit tests with mocked HTTP responses
+- `requirements.txt` (new) — Project dependencies (requests, gymnasium, stable-baselines3, torch, pytest)
+
+### Change Log
+
+- 2026-02-28: Story 1.1 implemented — adapter pattern with EngineAdapter ABC and RESTAdapter, 19 tests passing
+- 2026-02-28: Code review fixes — added JSONDecodeError/success:false handling, 10s request timeout, frozen dataclasses, exported all public types from __init__.py, 23 tests passing
