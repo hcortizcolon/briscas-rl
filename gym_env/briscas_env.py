@@ -22,9 +22,10 @@ class BriscasEnv(gymnasium.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(self, adapter: EngineAdapter) -> None:
+    def __init__(self, adapter: EngineAdapter, reward_scale: float = 1.0) -> None:
         super().__init__()
         self._adapter = adapter
+        self.reward_scale = reward_scale
         self.observation_space = build_observation_space()
         self.action_space = gymnasium.spaces.Discrete(3)
         self._state: GameState | None = None
@@ -47,14 +48,23 @@ class BriscasEnv(gymnasium.Env):
         masked_action = action % hand_size
         self._state = self._execute_turn(masked_action)
 
+        info = {}
         if self._state.game_over:
-            reward = self._compute_reward()
+            raw_reward = self._compute_reward()
+            # game_result based on raw (unscaled) reward
+            if raw_reward > 0:
+                info["game_result"] = "win"
+            elif raw_reward < 0:
+                info["game_result"] = "loss"
+            else:
+                info["game_result"] = "draw"
+            reward = raw_reward * self.reward_scale
             terminated = True
         else:
             reward = 0.0
             terminated = False
 
-        return self._get_observation(), reward, terminated, False, {}
+        return self._get_observation(), reward, terminated, False, info
 
     def _execute_turn(self, card_index: int) -> GameState:
         """Play card and loop process_ai_turn until it's our turn or game over."""
@@ -100,6 +110,13 @@ class BriscasEnv(gymnasium.Env):
         """Add trick cards to _cards_seen set."""
         for tc in state.trick:
             self._cards_seen.add(encode_card(tc.card))
+
+    def close(self) -> None:
+        """Clean up active game on the engine."""
+        if self._game_active:
+            self._adapter.delete_game()
+            self._game_active = False
+        super().close()
 
     def _compute_reward(self) -> float:
         """Compute normalized point differential reward."""

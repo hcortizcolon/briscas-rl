@@ -1,6 +1,6 @@
 # Story 2.1: Train Best Agent with DQN
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -22,53 +22,53 @@ So that I can produce an agent that plays Briscas as well as possible given obse
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add `reward_scale` parameter to `BriscasEnv` (AC: #1) — Do NOT use Gymnasium's `RewardWrapper`. Do NOT create a separate wrapper class. Modify `BriscasEnv` directly.
-  - [ ] Add `reward_scale: float = 1.0` to `BriscasEnv.__init__()`
-  - [ ] Multiply terminal reward by `self.reward_scale` in `step()`
-  - [ ] Add `info["game_result"] = "win" | "loss" | "draw"` to the info dict at terminal state (before scaling), based on raw point differential: >0 win, <0 loss, ==0 draw. Callbacks read this instead of interpreting scaled rewards.
-  - [ ] Add tests for `reward_scale=1.0` (default, unchanged behavior) and `reward_scale=-1.0` (negated)
-  - [ ] Add test that `info["game_result"]` is present and correct at terminal state for win, loss, and draw scenarios
-  - [ ] Verify all 85 existing tests still pass (no regressions)
-- [ ] Task 2: Create `training/train.py` — `train_agent()` function (AC: #1, #2, #3)
-  - [ ] Create `training/__init__.py` — export `train_agent` and `WinRateCallback` via `__all__`. Follow pattern from `gym_env/__init__.py`.
-  - [ ] Implement `train_agent(agent_type, total_timesteps, seed, output_path, engine_url, checkpoint_freq)` function
-  - [ ] Pre-flight connectivity check: call `env.reset()` before `model.learn()` — if `EngineConnectionError` raised, log clear message `"Cannot connect to game engine at {engine_url}. Is it running?"` and re-raise
-  - [ ] Wrap training in try/finally: `env.close()` in finally block to clean up engine state on crash
-  - [ ] Configure SB3 `DQN("MlpPolicy", env, verbose=1, learning_starts=1000)` — use SB3 defaults for all other hyperparameters. Do NOT create a hyperparameter config system. SB3 auto-wraps in `DummyVecEnv` — no explicit wrapping needed.
-  - [ ] Set `reward_scale = -1.0 if agent_type == "worst" else 1.0` and pass to `BriscasEnv`
-  - [ ] Configure `CheckpointCallback(save_freq=checkpoint_freq, save_path="models/checkpoints/", name_prefix="{agent_type}_agent")`
-  - [ ] Implement `WinRateCallback(BaseCallback)` — on `dones[0] == True`, read `infos[0]["terminal_info"]["game_result"]` (NOT `infos[0]["game_result"]` — DummyVecEnv auto-reset moves terminal info), track rolling window of last 1000 completed games, log every 100 completed games, format: `"Win rate (last 1000 games): 67.3% | Games played: 4521"`. Also log on first game completion: `"First game completed at timestep {n} | Result: {result}"` to confirm callback is working. Expose `self.games_played` and `self.win_rate` as attributes so `train_agent()` can read final stats after `.learn()` completes.
-  - [ ] Save model via `model.save(output_path)` — pass path **without** `.zip` extension (SB3 appends it)
-  - [ ] Write metadata JSON to `output_path + ".json"`: `{agent_type, seed, total_timesteps, reward_type: "normalized_differential", timestamp}`
-  - [ ] Print training summary to stdout: agent type, total timesteps, total games played (from `callback.games_played`), final win rate (from `callback.win_rate`), model path, metadata path. Never use the word "episodes" — use "timesteps" and "games".
-  - [ ] `os.makedirs()` for `models/` and `models/checkpoints/` before saving
-- [ ] Task 3: Create `scripts/train.py` — CLI entry point (AC: #4)
-  - [ ] Add `sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))` at the top of the script (before project imports) so `python scripts/train.py` works from the project root. This is required because Python doesn't add the project root to `sys.path` when running scripts from a subdirectory.
-  - [ ] argparse with flags: `--agent {best,worst}`, `--timesteps` (default 200000), `--seed` (default 42), `--output` (optional override, no extension), `--engine-url` (default `http://localhost:5000`), `--checkpoint-freq` (default 10000). Help text for `--timesteps`: "Total training timesteps. Minimum ~50k for any learning (learning_starts=1000)."
-  - [ ] Call `set_all_seeds(seed)` before training
-  - [ ] Construct default output path: `models/{agent_type}_agent_{timesteps // 1000}k` (no extension, e.g., `models/best_agent_200k`)
-  - [ ] Call `train_agent()` — let `EngineConnectionError` propagate to top level
-  - [ ] Configure `logging.basicConfig()` for stdout logging
-- [ ] Task 4: Write tests (AC: #1, #2, #3)
-  - [ ] **Unit tests (mocked SB3):**
-    - [ ] Test `reward_scale` on `BriscasEnv` (default=1.0 unchanged, -1.0 negates reward)
-    - [ ] Test `info["game_result"]` present at terminal state, correct for win/loss/draw
-    - [ ] Test `train_agent()` orchestration — verify DQN instantiated with correct params, `.learn()` called, model saved, metadata written
-    - [ ] Test metadata JSON contains all required fields and correct values
-    - [ ] Test metadata JSON path = model path with `.zip` replaced by `.json`
-    - [ ] Test default output path construction (no extension)
-    - [ ] Test `WinRateCallback` — simulate `dones[0]=True` with `infos[0]["game_result"]="win"/"loss"/"draw"`, verify rolling count, log frequency (every 100 games), and exposed `games_played`/`win_rate` attributes
-    - [ ] Test DQN configured with `learning_starts=1000` (not SB3 default of 50000)
-    - [ ] Test pre-flight check raises clear error when engine unreachable
-    - [ ] Test `env.close()` called even when training raises exception
-  - [ ] **Integration test (real SB3, mocked adapter):** `@pytest.mark.integration`
-    - [ ] Run `train_agent(agent_type="best", total_timesteps=100, ...)` with mocked `EngineAdapter` (not mocked SB3)
-    - [ ] Verify SB3 + BriscasEnv + callbacks work together end-to-end
-    - [ ] Verify `.zip` model file and `.json` metadata file are created on disk
-    - [ ] ~100 timesteps, should complete in <5 seconds
-- [ ] Task 5: Update `.gitignore` and create directories (AC: #2)
-  - [ ] Add `models/checkpoints/` to `.gitignore`
-  - [ ] Add `models/*.zip` and `models/*.json` to `.gitignore` (retrain from seeds)
+- [x] Task 1: Add `reward_scale` parameter to `BriscasEnv` (AC: #1) — Do NOT use Gymnasium's `RewardWrapper`. Do NOT create a separate wrapper class. Modify `BriscasEnv` directly.
+  - [x] Add `reward_scale: float = 1.0` to `BriscasEnv.__init__()`
+  - [x] Multiply terminal reward by `self.reward_scale` in `step()`
+  - [x] Add `info["game_result"] = "win" | "loss" | "draw"` to the info dict at terminal state (before scaling), based on raw point differential: >0 win, <0 loss, ==0 draw. Callbacks read this instead of interpreting scaled rewards.
+  - [x] Add tests for `reward_scale=1.0` (default, unchanged behavior) and `reward_scale=-1.0` (negated)
+  - [x] Add test that `info["game_result"]` is present and correct at terminal state for win, loss, and draw scenarios
+  - [x] Verify all 85 existing tests still pass (no regressions)
+- [x] Task 2: Create `training/train.py` — `train_agent()` function (AC: #1, #2, #3)
+  - [x] Create `training/__init__.py` — export `train_agent` and `WinRateCallback` via `__all__`. Follow pattern from `gym_env/__init__.py`.
+  - [x] Implement `train_agent(agent_type, total_timesteps, seed, output_path, engine_url, checkpoint_freq)` function
+  - [x] Pre-flight connectivity check: call `env.reset()` before `model.learn()` — if `EngineConnectionError` raised, log clear message `"Cannot connect to game engine at {engine_url}. Is it running?"` and re-raise
+  - [x] Wrap training in try/finally: `env.close()` in finally block to clean up engine state on crash
+  - [x] Configure SB3 `DQN("MlpPolicy", env, verbose=1, learning_starts=1000)` — use SB3 defaults for all other hyperparameters. Do NOT create a hyperparameter config system. SB3 auto-wraps in `DummyVecEnv` — no explicit wrapping needed.
+  - [x] Set `reward_scale = -1.0 if agent_type == "worst" else 1.0` and pass to `BriscasEnv`
+  - [x] Configure `CheckpointCallback(save_freq=checkpoint_freq, save_path="models/checkpoints/", name_prefix="{agent_type}_agent")`
+  - [x] Implement `WinRateCallback(BaseCallback)` — on `dones[0] == True`, read `infos[0]["terminal_info"]["game_result"]` (NOT `infos[0]["game_result"]` — DummyVecEnv auto-reset moves terminal info), track rolling window of last 1000 completed games, log every 100 completed games, format: `"Win rate (last 1000 games): 67.3% | Games played: 4521"`. Also log on first game completion: `"First game completed at timestep {n} | Result: {result}"` to confirm callback is working. Expose `self.games_played` and `self.win_rate` as attributes so `train_agent()` can read final stats after `.learn()` completes.
+  - [x] Save model via `model.save(output_path)` — pass path **without** `.zip` extension (SB3 appends it)
+  - [x] Write metadata JSON to `output_path + ".json"`: `{agent_type, seed, total_timesteps, reward_type: "normalized_differential", timestamp}`
+  - [x] Print training summary to stdout: agent type, total timesteps, total games played (from `callback.games_played`), final win rate (from `callback.win_rate`), model path, metadata path. Never use the word "episodes" — use "timesteps" and "games".
+  - [x] `os.makedirs()` for `models/` and `models/checkpoints/` before saving
+- [x] Task 3: Create `scripts/train.py` — CLI entry point (AC: #4)
+  - [x] Add `sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))` at the top of the script (before project imports) so `python scripts/train.py` works from the project root. This is required because Python doesn't add the project root to `sys.path` when running scripts from a subdirectory.
+  - [x] argparse with flags: `--agent {best,worst}`, `--timesteps` (default 200000), `--seed` (default 42), `--output` (optional override, no extension), `--engine-url` (default `http://localhost:5000`), `--checkpoint-freq` (default 10000). Help text for `--timesteps`: "Total training timesteps. Minimum ~50k for any learning (learning_starts=1000)."
+  - [x] Call `set_all_seeds(seed)` before training
+  - [x] Construct default output path: `models/{agent_type}_agent_{timesteps // 1000}k` (no extension, e.g., `models/best_agent_200k`)
+  - [x] Call `train_agent()` — let `EngineConnectionError` propagate to top level
+  - [x] Configure `logging.basicConfig()` for stdout logging
+- [x] Task 4: Write tests (AC: #1, #2, #3)
+  - [x] **Unit tests (mocked SB3):**
+    - [x] Test `reward_scale` on `BriscasEnv` (default=1.0 unchanged, -1.0 negates reward)
+    - [x] Test `info["game_result"]` present at terminal state, correct for win/loss/draw
+    - [x] Test `train_agent()` orchestration — verify DQN instantiated with correct params, `.learn()` called, model saved, metadata written
+    - [x] Test metadata JSON contains all required fields and correct values
+    - [x] Test metadata JSON path = model path with `.zip` replaced by `.json`
+    - [x] Test default output path construction (no extension)
+    - [x] Test `WinRateCallback` — simulate `dones[0]=True` with `infos[0]["game_result"]="win"/"loss"/"draw"`, verify rolling count, log frequency (every 100 games), and exposed `games_played`/`win_rate` attributes
+    - [x] Test DQN configured with `learning_starts=1000` (not SB3 default of 50000)
+    - [x] Test pre-flight check raises clear error when engine unreachable
+    - [x] Test `env.close()` called even when training raises exception
+  - [x] **Integration test (real SB3, mocked adapter):** `@pytest.mark.integration`
+    - [x] Run `train_agent(agent_type="best", total_timesteps=100, ...)` with mocked `EngineAdapter` (not mocked SB3)
+    - [x] Verify SB3 + BriscasEnv + callbacks work together end-to-end
+    - [x] Verify `.zip` model file and `.json` metadata file are created on disk
+    - [x] ~100 timesteps, should complete in <5 seconds
+- [x] Task 5: Update `.gitignore` and create directories (AC: #2)
+  - [x] Add `models/checkpoints/` to `.gitignore`
+  - [x] Add `models/*.zip` and `models/*.json` to `.gitignore` (retrain from seeds)
 
 ## Dev Notes
 
@@ -267,12 +267,30 @@ briscas_rl/
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.6
 
 ### Debug Log References
 
+None.
+
 ### Completion Notes List
+
+- Task 1: Added `reward_scale` param to `BriscasEnv.__init__()`, terminal reward multiplied by scale in `step()`. Added `info["game_result"]` based on raw point differential before scaling. Added `close()` method to clean up engine state. 7 new tests (3 reward_scale, 4 game_result). 92/92 pass.
+- Task 2: Created `training/train.py` with `train_agent()` function and `WinRateCallback`. DQN configured with `learning_starts=1000`, SB3 defaults for all else. Callback reads `infos[0]["terminal_info"]["game_result"]` (DummyVecEnv-safe). Pre-flight `env.reset()` check, try/finally with `env.close()`. Metadata JSON with UTC timestamp. Created `training/__init__.py` with `__all__` exports.
+- Task 3: Created `scripts/train.py` CLI with argparse. sys.path fix for project root. Calls `set_all_seeds()` then `train_agent()`. Default output path: `models/{agent}_agent_{timesteps//1000}k`.
+- Task 4: 19 tests total — 8 WinRateCallback unit tests, 10 train_agent unit tests (mocked SB3), 1 integration test (real SB3, mocked adapter, 100 timesteps). All pass. 111/111 total suite.
+- Task 5: Added `models/checkpoints/`, `models/*.zip`, `models/*.json` to `.gitignore`.
 
 ### Change Log
 
+- 2026-03-02: Implemented Story 2.1 — DQN training pipeline with reward_scale, WinRateCallback, CLI, and 26 new tests.
+
 ### File List
+
+- `gym_env/briscas_env.py` — MODIFIED (reward_scale param, game_result info, close() method)
+- `training/__init__.py` — NEW (exports train_agent, WinRateCallback)
+- `training/train.py` — NEW (train_agent function, WinRateCallback class)
+- `scripts/train.py` — NEW (CLI entry point with argparse)
+- `tests/test_briscas_env.py` — MODIFIED (added TestRewardScale, TestGameResultInfo)
+- `tests/test_training.py` — NEW (unit + integration tests for training)
+- `.gitignore` — MODIFIED (added models patterns)

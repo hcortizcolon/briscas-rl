@@ -539,3 +539,92 @@ class TestStepGuards:
         env.reset()
         with pytest.raises(ValueError, match="empty hand"):
             env.step(0)
+
+
+class TestRewardScale:
+    """Test reward_scale parameter on BriscasEnv."""
+
+    def test_default_reward_scale_unchanged(self):
+        """Default reward_scale=1.0 should not change reward."""
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(80, 40), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, reward, _, _, _ = env.step(0)
+        assert reward == pytest.approx((80 - 40) / 120)
+
+    def test_negative_reward_scale(self):
+        """reward_scale=-1.0 should negate the reward."""
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(80, 40), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter, reward_scale=-1.0)
+        env.reset()
+        _, reward, _, _, _ = env.step(0)
+        assert reward == pytest.approx(-(80 - 40) / 120)
+
+    def test_intermediate_reward_unaffected_by_scale(self):
+        """Non-terminal reward should be 0.0 regardless of reward_scale."""
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        adapter.play_card.return_value = _state(game_over=False, is_your_turn=True)
+        env = BriscasEnv(adapter=adapter, reward_scale=-1.0)
+        env.reset()
+        _, reward, _, _, _ = env.step(0)
+        assert reward == 0.0
+
+
+class TestGameResultInfo:
+    """Test info['game_result'] at terminal state."""
+
+    def test_game_result_win(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(80, 40), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert info["game_result"] == "win"
+
+    def test_game_result_loss(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(40, 80), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert info["game_result"] == "loss"
+
+    def test_game_result_draw(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(60, 60), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert info["game_result"] == "draw"
+
+    def test_game_result_not_present_mid_game(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        adapter.play_card.return_value = _state(game_over=False, is_your_turn=True)
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert "game_result" not in info

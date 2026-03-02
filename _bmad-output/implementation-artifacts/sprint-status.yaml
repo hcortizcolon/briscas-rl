@@ -41,7 +41,7 @@ development_status:
   epic-1-retrospective: optional
 
   epic-2: in-progress
-  2-1-train-best-agent-with-dqn: ready-for-dev
+  2-1-train-best-agent-with-dqn: review
   2-2-train-and-validate-worst-agent: backlog
   2-3-load-and-resume-trained-models: backlog
   epic-2-retrospective: optional
