@@ -114,14 +114,20 @@ def load_agent(model_path: str) -> tuple[DQN, dict | None]:
     metadata = None
     metadata_path = model_path + ".json"
     if os.path.isfile(metadata_path):
-        with open(metadata_path) as f:
-            metadata = json.load(f)
-        logger.info(
-            "Loaded agent from %s | Agent type: %s | Trained: %s timesteps",
-            zip_path,
-            metadata.get("agent_type", "unknown"),
-            metadata.get("total_timesteps", "unknown"),
-        )
+        try:
+            with open(metadata_path) as f:
+                metadata = json.load(f)
+        except json.JSONDecodeError:
+            logger.warning("Metadata file is corrupted at %s", metadata_path)
+        if metadata is not None:
+            logger.info(
+                "Loaded agent from %s | Agent type: %s | Trained: %s timesteps",
+                zip_path,
+                metadata.get("agent_type", "unknown"),
+                metadata.get("total_timesteps", "unknown"),
+            )
+        else:
+            logger.info("Loaded agent from %s | No metadata available", zip_path)
     else:
         logger.warning("No metadata file found at %s", metadata_path)
         logger.info("Loaded agent from %s | No metadata available", zip_path)

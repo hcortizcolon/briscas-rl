@@ -2,7 +2,7 @@
 
 import json
 import os
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -13,9 +13,8 @@ from gym_env.engine_adapter import (
     EngineConnectionError,
     GameState,
     PlayerInfo,
-    TrickCard,
 )
-from training.train import VALIDATION_NUM_GAMES, WORST_AGENT_WARNING_THRESHOLD, WinRateCallback, load_agent, train_agent, validate_worst_agent
+from training.train import VALIDATION_NUM_GAMES, WinRateCallback, load_agent, train_agent, validate_worst_agent
 
 
 # --- Helpers ---
@@ -136,6 +135,21 @@ class TestLoadAgentUnit:
 
         with pytest.raises(Exception, match="BadZipFile"):
             load_agent(model_path)
+
+    @patch("training.train.DQN")
+    def test_malformed_json_returns_none_metadata(self, mock_dqn_cls, tmp_path, caplog):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        (tmp_path / "agent.json").write_text("{bad json")
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="training.train"):
+            model, meta = load_agent(model_path)
+
+        assert meta is None
+        assert model is mock_dqn_cls.load.return_value
+        assert any("corrupted" in r.message for r in caplog.records)
 
     @patch("training.train.DQN")
     def test_double_zip_extension(self, mock_dqn_cls, tmp_path):
@@ -730,6 +744,7 @@ def test_integration_load_agent(tmp_path):
     obs = np.zeros(13, dtype=np.float32)
     action, _states = model.predict(obs, deterministic=True)
     assert isinstance(action, np.ndarray)
+    assert 0 <= action.item() <= 2, f"Action {action.item()} out of valid range [0, 2]"
 
     # Verify metadata round-trip
     assert metadata["agent_type"] == "best"
