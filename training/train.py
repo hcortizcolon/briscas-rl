@@ -100,6 +100,35 @@ def validate_worst_agent(model, adapter, num_games: int = 1000) -> float:
     return win_rate
 
 
+def load_agent(model_path: str) -> tuple[DQN, dict | None]:
+    """Load a saved DQN model and its metadata from disk."""
+    if model_path.endswith(".zip"):
+        model_path = model_path[:-4]
+
+    zip_path = model_path + ".zip"
+    if not os.path.isfile(zip_path):
+        raise FileNotFoundError(f"Model file not found: {zip_path}")
+
+    model = DQN.load(model_path)
+
+    metadata = None
+    metadata_path = model_path + ".json"
+    if os.path.isfile(metadata_path):
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        logger.info(
+            "Loaded agent from %s | Agent type: %s | Trained: %s timesteps",
+            zip_path,
+            metadata.get("agent_type", "unknown"),
+            metadata.get("total_timesteps", "unknown"),
+        )
+    else:
+        logger.warning("No metadata file found at %s", metadata_path)
+        logger.info("Loaded agent from %s | No metadata available", zip_path)
+
+    return model, metadata
+
+
 def train_agent(
     agent_type: str,
     total_timesteps: int,

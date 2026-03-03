@@ -15,7 +15,7 @@ from gym_env.engine_adapter import (
     PlayerInfo,
     TrickCard,
 )
-from training.train import VALIDATION_NUM_GAMES, WORST_AGENT_WARNING_THRESHOLD, WinRateCallback, train_agent, validate_worst_agent
+from training.train import VALIDATION_NUM_GAMES, WORST_AGENT_WARNING_THRESHOLD, WinRateCallback, load_agent, train_agent, validate_worst_agent
 
 
 # --- Helpers ---
@@ -40,6 +40,113 @@ def _state(hand=None, game_over=False, agent_score=0, opponent_score=0, is_your_
         hand=hand, trump=_card(5, "Bastos"), trick=[], players=_players(agent_score, opponent_score),
         deck_remaining=30, round_number=1, game_over=game_over, winner=None, is_your_turn=is_your_turn,
     )
+
+
+# --- load_agent() Unit Tests ---
+
+class TestLoadAgentUnit:
+    """Unit tests for load_agent() with mocked SB3."""
+
+    @patch("training.train.DQN")
+    def test_calls_dqn_load_with_correct_path(self, mock_dqn_cls, tmp_path):
+        model_path = str(tmp_path / "my_model")
+        (tmp_path / "my_model.zip").write_bytes(b"fake")
+        mock_model = MagicMock()
+        mock_dqn_cls.load.return_value = mock_model
+
+        load_agent(model_path)
+
+        mock_dqn_cls.load.assert_called_once_with(model_path)
+
+    @patch("training.train.DQN")
+    def test_returns_model_and_metadata_tuple(self, mock_dqn_cls, tmp_path):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        metadata = {"agent_type": "best", "seed": 42, "total_timesteps": 5000,
+                     "reward_type": "normalized_differential", "timestamp": "2026-01-01T00:00:00Z"}
+        (tmp_path / "agent.json").write_text(json.dumps(metadata))
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        model, meta = load_agent(model_path)
+
+        assert model is mock_dqn_cls.load.return_value
+        assert meta == metadata
+
+    @patch("training.train.DQN")
+    def test_returns_none_metadata_when_json_missing(self, mock_dqn_cls, tmp_path, caplog):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="training.train"):
+            model, meta = load_agent(model_path)
+
+        assert meta is None
+        assert any("No metadata file found" in r.message for r in caplog.records)
+
+    def test_raises_file_not_found_when_zip_missing(self, tmp_path):
+        model_path = str(tmp_path / "nonexistent_model")
+
+        with pytest.raises(FileNotFoundError, match="Model file not found"):
+            load_agent(model_path)
+
+    @patch("training.train.DQN")
+    def test_strips_zip_extension_from_input(self, mock_dqn_cls, tmp_path):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        load_agent(model_path + ".zip")
+
+        mock_dqn_cls.load.assert_called_once_with(model_path)
+
+    @patch("training.train.DQN")
+    def test_handles_path_without_zip_extension(self, mock_dqn_cls, tmp_path):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        load_agent(model_path)
+
+        mock_dqn_cls.load.assert_called_once_with(model_path)
+
+    @patch("training.train.DQN")
+    def test_metadata_contents_correct(self, mock_dqn_cls, tmp_path):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        expected = {"agent_type": "worst", "seed": 7, "total_timesteps": 10000,
+                    "reward_type": "normalized_differential", "timestamp": "2026-02-01T12:00:00Z"}
+        (tmp_path / "agent.json").write_text(json.dumps(expected))
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        _, meta = load_agent(model_path)
+
+        assert meta["agent_type"] == "worst"
+        assert meta["seed"] == 7
+        assert meta["total_timesteps"] == 10000
+        assert meta["reward_type"] == "normalized_differential"
+        assert meta["timestamp"] == "2026-02-01T12:00:00Z"
+
+    @patch("training.train.DQN")
+    def test_corrupted_zip_propagates_exception(self, mock_dqn_cls, tmp_path):
+        model_path = str(tmp_path / "agent")
+        (tmp_path / "agent.zip").write_bytes(b"fake")
+        mock_dqn_cls.load.side_effect = Exception("BadZipFile")
+
+        with pytest.raises(Exception, match="BadZipFile"):
+            load_agent(model_path)
+
+    @patch("training.train.DQN")
+    def test_double_zip_extension(self, mock_dqn_cls, tmp_path):
+        # "path.zip.zip" → strips one .zip → "path.zip", SB3 loads "path.zip"
+        base = str(tmp_path / "agent.zip")
+        (tmp_path / "agent.zip.zip").write_bytes(b"fake")
+        mock_dqn_cls.load.return_value = MagicMock()
+
+        load_agent(base + ".zip")
+
+        mock_dqn_cls.load.assert_called_once_with(base)
 
 
 # --- WinRateCallback Unit Tests ---
@@ -598,3 +705,35 @@ class TestTrainAgentValidation:
             metadata = json.load(f)
         assert "validation_win_rate" not in metadata
         assert "validation_games" not in metadata
+
+
+# --- load_agent() Integration Test ---
+
+@pytest.mark.integration
+def test_integration_load_agent(tmp_path):
+    """Train a model with real SB3, save it, then load with load_agent()."""
+    adapter = _mock_adapter_for_integration()
+    output_path = str(tmp_path / "best_agent_roundtrip")
+
+    with patch("training.train.RESTAdapter", return_value=adapter):
+        train_agent(
+            agent_type="best",
+            total_timesteps=100,
+            seed=42,
+            output_path=output_path,
+        )
+
+    # Now load the model with load_agent
+    model, metadata = load_agent(output_path)
+
+    # Verify model can predict (observation space is 13-dim)
+    obs = np.zeros(13, dtype=np.float32)
+    action, _states = model.predict(obs, deterministic=True)
+    assert isinstance(action, np.ndarray)
+
+    # Verify metadata round-trip
+    assert metadata["agent_type"] == "best"
+    assert metadata["seed"] == 42
+    assert metadata["total_timesteps"] == 100
+    assert metadata["reward_type"] == "normalized_differential"
+    assert "timestamp" in metadata
