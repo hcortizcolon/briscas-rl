@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # 5% margin below 50%; statistically significant at p < 0.001 with 1000 games
 WORST_AGENT_WARNING_THRESHOLD = 0.45
+VALIDATION_NUM_GAMES = 1000
 
 
 class WinRateCallback(BaseCallback):
@@ -58,6 +59,8 @@ class WinRateCallback(BaseCallback):
 
 def validate_worst_agent(model, adapter, num_games: int = 1000) -> float:
     """Run evaluation games and return the worst agent's win rate."""
+    if num_games <= 0:
+        raise ValueError("num_games must be positive")
     env = BriscasEnv(adapter=adapter, reward_scale=1.0)
     wins = 0
     losses = 0
@@ -75,7 +78,10 @@ def validate_worst_agent(model, adapter, num_games: int = 1000) -> float:
                 wins += 1
             elif result == "loss":
                 losses += 1
+            elif result == "draw":
+                draws += 1
             else:
+                logger.warning("Unexpected game_result: %s", result)
                 draws += 1
     finally:
         env.close()
@@ -151,13 +157,16 @@ def train_agent(
             metadata_path,
         )
 
+        # Close training env before validation to avoid shared adapter issues
+        env.close()
+
         if agent_type == "worst":
             try:
-                val_win_rate = validate_worst_agent(model, adapter)
+                val_win_rate = validate_worst_agent(model, adapter, num_games=VALIDATION_NUM_GAMES)
                 with open(metadata_path) as f:
                     meta = json.load(f)
                 meta["validation_win_rate"] = val_win_rate
-                meta["validation_games"] = 1000
+                meta["validation_games"] = VALIDATION_NUM_GAMES
                 with open(metadata_path, "w") as f:
                     json.dump(meta, f, indent=2)
             except Exception as e:

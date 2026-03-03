@@ -15,7 +15,7 @@ from gym_env.engine_adapter import (
     PlayerInfo,
     TrickCard,
 )
-from training.train import WORST_AGENT_WARNING_THRESHOLD, WinRateCallback, train_agent, validate_worst_agent
+from training.train import VALIDATION_NUM_GAMES, WORST_AGENT_WARNING_THRESHOLD, WinRateCallback, train_agent, validate_worst_agent
 
 
 # --- Helpers ---
@@ -369,13 +369,12 @@ def test_integration_train_agent(tmp_path):
 
 @pytest.mark.integration
 def test_integration_train_worst_agent(tmp_path):
-    """Real SB3 + mocked adapter for worst agent — verify training + validation end-to-end."""
+    """Real SB3 + mocked adapter for worst agent — verify training + real validation end-to-end."""
     adapter = _mock_adapter_for_integration()
     output_path = str(tmp_path / "worst_agent_test")
 
-    # Mock validate_worst_agent to avoid running real eval loop (adapter returns wins, not losses)
     with patch("training.train.RESTAdapter", return_value=adapter), \
-         patch("training.train.validate_worst_agent", return_value=0.2) as mock_validate:
+         patch("training.train.VALIDATION_NUM_GAMES", 10):
         train_agent(
             agent_type="worst",
             total_timesteps=100,
@@ -392,13 +391,8 @@ def test_integration_train_worst_agent(tmp_path):
     with open(metadata_path) as f:
         metadata = json.load(f)
     assert metadata["agent_type"] == "worst"
-    assert metadata["validation_win_rate"] == 0.2
-    assert metadata["validation_games"] == 1000
-
-    # Verify validation was called with model and adapter
-    mock_validate.assert_called_once()
-    call_args = mock_validate.call_args
-    assert call_args[0][1] is adapter  # adapter argument
+    assert "validation_win_rate" in metadata
+    assert metadata["validation_games"] == 10
 
 
 # --- validate_worst_agent() Unit Tests ---
@@ -487,6 +481,26 @@ class TestValidateWorstAgent:
         mock_env.close.assert_called_once()
 
     @patch("training.train.BriscasEnv")
+    def test_warning_at_exact_threshold(self, mock_env_cls, caplog):
+        # 9/20 = 0.45 = exactly at threshold, >= triggers warning
+        results = ["win"] * 9 + ["loss"] * 11
+        mock_model, mock_adapter, mock_reset, mock_step = self._mock_env_and_model(results)
+        mock_env = MagicMock()
+        mock_env.reset = mock_reset
+        mock_env.step = mock_step
+        mock_env_cls.return_value = mock_env
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="training.train"):
+            validate_worst_agent(mock_model, mock_adapter, num_games=20)
+
+        assert any("anti-optimal" in r.message for r in caplog.records)
+
+    def test_raises_on_zero_num_games(self):
+        with pytest.raises(ValueError, match="num_games must be positive"):
+            validate_worst_agent(MagicMock(), MagicMock(), num_games=0)
+
+    @patch("training.train.BriscasEnv")
     def test_env_created_with_reward_scale_1(self, mock_env_cls):
         results = ["loss"] * 3
         mock_model, mock_adapter, mock_reset, mock_step = self._mock_env_and_model(results)
@@ -545,7 +559,7 @@ class TestTrainAgentValidation:
         with open(output_path + ".json") as f:
             metadata = json.load(f)
         assert metadata["validation_win_rate"] == 0.3
-        assert metadata["validation_games"] == 1000
+        assert metadata["validation_games"] == VALIDATION_NUM_GAMES
 
     @patch("training.train.RESTAdapter")
     @patch("training.train.DQN")

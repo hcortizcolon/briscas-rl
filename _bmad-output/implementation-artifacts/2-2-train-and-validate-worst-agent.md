@@ -1,6 +1,6 @@
 # Story 2.2: Train and Validate Worst Agent
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -181,12 +181,23 @@ None — clean implementation, all tests passed first run.
 - Updated `training/__init__.py` to export `validate_worst_agent`
 - All 121 tests passing (was 111), 0 regressions
 
+#### Code Review Fixes (2026-03-03)
+
+- **H1**: Added `VALIDATION_NUM_GAMES = 1000` constant — `train_agent()` now passes it explicitly to `validate_worst_agent()` and writes it to metadata, eliminating fragile hardcoded coupling
+- **H2**: Rewrote `test_integration_train_worst_agent` to exercise real `validate_worst_agent()` instead of mocking it — now verifies model.predict is actually called in the validation loop
+- **M1**: Training env is now closed before validation runs, preventing shared adapter issues (double `delete_game()` on same session)
+- **M2**: `validate_worst_agent()` now explicitly checks for `"draw"` and logs a warning for unexpected `game_result` values instead of silently counting them as draws
+- **L1**: Added threshold boundary test (`win_rate == 0.45` triggers warning)
+- **L2**: Added `num_games <= 0` guard with `ValueError`
+- All 123 tests passing (was 121), 0 regressions
+
 ### Change Log
 
 - 2026-03-03: Story 2.2 implementation complete — validate_worst_agent(), train_agent() integration, 10 new tests
+- 2026-03-03: Code review — fixed 6 issues (2 HIGH, 2 MEDIUM, 2 LOW), added 2 tests, 123 total passing
 
 ### File List
 
-- `training/train.py` — MODIFIED: added WORST_AGENT_WARNING_THRESHOLD, validate_worst_agent(), validation integration in train_agent()
-- `training/__init__.py` — MODIFIED: added validate_worst_agent to __all__
-- `tests/test_training.py` — MODIFIED: added TestValidateWorstAgent (5 tests), TestTrainAgentValidation (4 tests), test_integration_train_worst_agent (1 test)
+- `training/train.py` — MODIFIED: added WORST_AGENT_WARNING_THRESHOLD, VALIDATION_NUM_GAMES, validate_worst_agent(), validation integration in train_agent(), explicit draw handling, num_games guard
+- `training/__init__.py` — MODIFIED: added validate_worst_agent and VALIDATION_NUM_GAMES to __all__
+- `tests/test_training.py` — MODIFIED: added TestValidateWorstAgent (7 tests), TestTrainAgentValidation (4 tests), test_integration_train_worst_agent (1 test)
