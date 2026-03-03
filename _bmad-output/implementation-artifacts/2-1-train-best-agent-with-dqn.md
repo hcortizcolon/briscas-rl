@@ -1,6 +1,6 @@
 # Story 2.1: Train Best Agent with DQN
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -37,7 +37,7 @@ So that I can produce an agent that plays Briscas as well as possible given obse
   - [x] Configure SB3 `DQN("MlpPolicy", env, verbose=1, learning_starts=1000)` — use SB3 defaults for all other hyperparameters. Do NOT create a hyperparameter config system. SB3 auto-wraps in `DummyVecEnv` — no explicit wrapping needed.
   - [x] Set `reward_scale = -1.0 if agent_type == "worst" else 1.0` and pass to `BriscasEnv`
   - [x] Configure `CheckpointCallback(save_freq=checkpoint_freq, save_path="models/checkpoints/", name_prefix="{agent_type}_agent")`
-  - [x] Implement `WinRateCallback(BaseCallback)` — on `dones[0] == True`, read `infos[0]["terminal_info"]["game_result"]` (NOT `infos[0]["game_result"]` — DummyVecEnv auto-reset moves terminal info), track rolling window of last 1000 completed games, log every 100 completed games, format: `"Win rate (last 1000 games): 67.3% | Games played: 4521"`. Also log on first game completion: `"First game completed at timestep {n} | Result: {result}"` to confirm callback is working. Expose `self.games_played` and `self.win_rate` as attributes so `train_agent()` can read final stats after `.learn()` completes.
+  - [x] Implement `WinRateCallback(BaseCallback)` — on `dones[0] == True`, read `infos[0]["game_result"]` (SB3 v2.7.x DummyVecEnv preserves terminal info dict directly in `infos[0]`), track rolling window of last 1000 completed games, log every 100 completed games, format: `"Win rate (last 1000 games): 67.3% | Games played: 4521"`. Also log on first game completion: `"First game completed at timestep {n} | Result: {result}"` to confirm callback is working. Expose `self.games_played` and `self.win_rate` as attributes so `train_agent()` can read final stats after `.learn()` completes.
   - [x] Save model via `model.save(output_path)` — pass path **without** `.zip` extension (SB3 appends it)
   - [x] Write metadata JSON to `output_path + ".json"`: `{agent_type, seed, total_timesteps, reward_type: "normalized_differential", timestamp}`
   - [x] Print training summary to stdout: agent type, total timesteps, total games played (from `callback.games_played`), final win rate (from `callback.win_rate`), model path, metadata path. Never use the word "episodes" — use "timesteps" and "games".
@@ -78,7 +78,7 @@ So that I can produce an agent that plays Briscas as well as possible given obse
 - **CRITICAL — `learning_starts` pitfall:** SB3's DQN defaults to `learning_starts=50000`, meaning the agent does pure random exploration for the first 50k timesteps before any gradient updates. With `--timesteps 50000`, zero learning would occur. We override to `learning_starts=1000`.
 - **Terminology:** Use "timesteps" (individual env.step() calls) and "games" (full Briscas games from reset to terminal). Never use "episodes" in code, logs, or output — it's ambiguous in the SB3 context.
 - **SB3 DummyVecEnv auto-wrapping:** When you pass a raw Gymnasium env to `DQN()`, SB3 auto-wraps it in `DummyVecEnv`. This means `dones` becomes `np.array([True])` (array, not scalar) and `infos` becomes `[{...}]` (list, not dict). All callback code must index into these: `dones[0]`, `infos[0]`.
-- **CRITICAL — DummyVecEnv auto-reset overwrites info:** When `dones[0] == True`, SB3's `DummyVecEnv` has ALREADY auto-reset the env by the time the callback fires. The terminal step's info is NOT in `infos[0]` directly — it is stored in `infos[0]["terminal_info"]`. Read game_result via `infos[0]["terminal_info"]["game_result"]`. Similarly, terminal observation is in `infos[0]["terminal_observation"]`. This is the #1 SB3 callback footgun.
+- **DummyVecEnv auto-reset behavior (SB3 v2.7.x):** When `dones[0] == True`, SB3's `DummyVecEnv` auto-resets the env but preserves the terminal step's info dict in `infos[0]` directly. The terminal observation is saved to `infos[0]["terminal_observation"]`. Read game_result via `infos[0]["game_result"]` — NOT `infos[0]["terminal_info"]` (that key does not exist in SB3 v2.7.x DummyVecEnv).
 - **Reward scaling inside the env:** Architecture mandates "never modify the reward signal outside the env wrapper." The `reward_scale` parameter on `BriscasEnv` satisfies this. Do NOT use Gymnasium's `RewardWrapper` or any external wrapper.
 - **`info["game_result"]`:** Added to `BriscasEnv.step()` at terminal state BEFORE reward scaling. Values: `"win"` (raw differential > 0), `"loss"` (< 0), `"draw"` (== 0). This is the single source of truth for game outcomes — callbacks and evaluation code read this instead of interpreting reward values.
 - **File path convention:** All output paths are specified WITHOUT extension. `model.save(path)` appends `.zip`. Metadata is written to `path + ".json"`. This keeps the pairing consistent and testable.
@@ -284,6 +284,7 @@ None.
 ### Change Log
 
 - 2026-03-02: Implemented Story 2.1 — DQN training pipeline with reward_scale, WinRateCallback, CLI, and 26 new tests.
+- 2026-03-02: Code review fixes — Fixed critical WinRateCallback bug (read game_result directly from infos, not terminal_info wrapper), fixed unit tests to match real SB3 DummyVecEnv info structure, moved makedirs before model.learn(), strengthened integration test with callback assertions, registered pytest integration mark, updated File List.
 
 ### File List
 
@@ -294,3 +295,5 @@ None.
 - `tests/test_briscas_env.py` — MODIFIED (added TestRewardScale, TestGameResultInfo)
 - `tests/test_training.py` — NEW (unit + integration tests for training)
 - `.gitignore` — MODIFIED (added models patterns)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — MODIFIED (story status updated)
+- `pytest.ini` — NEW (register integration mark)

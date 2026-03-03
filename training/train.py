@@ -30,8 +30,7 @@ class WinRateCallback(BaseCallback):
         dones = self.locals["dones"]
         infos = self.locals["infos"]
         if dones[0]:
-            terminal_info = infos[0].get("terminal_info", {})
-            result = terminal_info.get("game_result", "unknown")
+            result = infos[0].get("game_result", "unknown")
             self._results.append(result)
             self.games_played += 1
             wins = sum(1 for r in self._results if r == "win")
@@ -81,11 +80,12 @@ def train_agent(
         )
         winrate_cb = WinRateCallback()
 
+        # Create output directories before training
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
         model.learn(total_timesteps=total_timesteps, callback=[checkpoint_cb, winrate_cb])
 
         # Save model and metadata
-        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-        os.makedirs("models/checkpoints/", exist_ok=True)
         model.save(output_path)
 
         metadata = {

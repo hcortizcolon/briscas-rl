@@ -62,7 +62,7 @@ class TestWinRateCallback:
         cb.num_timesteps = 10
         cb.locals = {
             "dones": np.array([True]),
-            "infos": [{"terminal_info": {"game_result": "win"}}],
+            "infos": [{"game_result": "win"}],
         }
         cb._on_step()
         assert cb.games_played == 1
@@ -73,7 +73,7 @@ class TestWinRateCallback:
         cb.num_timesteps = 10
         cb.locals = {
             "dones": np.array([True]),
-            "infos": [{"terminal_info": {"game_result": "loss"}}],
+            "infos": [{"game_result": "loss"}],
         }
         cb._on_step()
         assert cb.games_played == 1
@@ -86,7 +86,7 @@ class TestWinRateCallback:
             cb.num_timesteps = (i + 1) * 10
             cb.locals = {
                 "dones": np.array([True]),
-                "infos": [{"terminal_info": {"game_result": result}}],
+                "infos": [{"game_result": result}],
             }
             cb._on_step()
         assert cb.games_played == 5
@@ -107,7 +107,7 @@ class TestWinRateCallback:
             cb.num_timesteps = (i + 1) * 10
             cb.locals = {
                 "dones": np.array([True]),
-                "infos": [{"terminal_info": {"game_result": "win"}}],
+                "infos": [{"game_result": "win"}],
             }
             cb._on_step()
         assert cb.games_played == 100
@@ -117,7 +117,7 @@ class TestWinRateCallback:
         cb = self._make_callback()
         cb.locals = {
             "dones": np.array([True]),
-            "infos": [{"terminal_info": {"game_result": "win"}}],
+            "infos": [{"game_result": "win"}],
         }
         cb.num_timesteps = 1
         assert cb._on_step() is True
@@ -330,7 +330,17 @@ def test_integration_train_agent(tmp_path):
     adapter = _mock_adapter_for_integration()
     output_path = str(tmp_path / "best_agent_test")
 
-    with patch("training.train.RESTAdapter", return_value=adapter):
+    # Capture WinRateCallback instance to verify it tracked games
+    captured_callbacks = []
+    _OriginalWinRateCallback = WinRateCallback
+
+    def _spy_winrate(*args, **kwargs):
+        cb = _OriginalWinRateCallback(*args, **kwargs)
+        captured_callbacks.append(cb)
+        return cb
+
+    with patch("training.train.RESTAdapter", return_value=adapter), \
+         patch("training.train.WinRateCallback", side_effect=_spy_winrate):
         train_agent(
             agent_type="best",
             total_timesteps=100,
@@ -349,3 +359,9 @@ def test_integration_train_agent(tmp_path):
     assert metadata["agent_type"] == "best"
     assert metadata["seed"] == 42
     assert metadata["total_timesteps"] == 100
+
+    # Verify WinRateCallback actually tracked games with correct results
+    assert len(captured_callbacks) == 1
+    cb = captured_callbacks[0]
+    assert cb.games_played > 0, "WinRateCallback should have tracked at least 1 game"
+    assert cb.win_rate > 0.0, "Win rate should be > 0 (all games are wins in mock)"
