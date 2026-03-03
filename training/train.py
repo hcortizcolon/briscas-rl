@@ -14,6 +14,9 @@ from gym_env.engine_adapter import RESTAdapter
 
 logger = logging.getLogger(__name__)
 
+# 5% margin below 50%; statistically significant at p < 0.001 with 1000 games
+WORST_AGENT_WARNING_THRESHOLD = 0.45
+
 
 class WinRateCallback(BaseCallback):
     """Track win rate over a rolling window of completed games."""
@@ -51,6 +54,44 @@ class WinRateCallback(BaseCallback):
                     self.games_played,
                 )
         return True
+
+
+def validate_worst_agent(model, adapter, num_games: int = 1000) -> float:
+    """Run evaluation games and return the worst agent's win rate."""
+    env = BriscasEnv(adapter=adapter, reward_scale=1.0)
+    wins = 0
+    losses = 0
+    draws = 0
+    try:
+        for _ in range(num_games):
+            obs, _ = env.reset()
+            done = False
+            while not done:
+                action, _states = model.predict(obs, deterministic=True)
+                obs, _reward, terminated, truncated, info = env.step(int(action.item()))
+                done = terminated or truncated
+            result = info.get("game_result", "unknown")
+            if result == "win":
+                wins += 1
+            elif result == "loss":
+                losses += 1
+            else:
+                draws += 1
+    finally:
+        env.close()
+
+    win_rate = wins / num_games
+    logger.info(
+        "Worst agent validation: %dW / %dL / %dD over %d games | Win rate: %.1f%%",
+        wins, losses, draws, num_games, win_rate * 100,
+    )
+    if win_rate >= WORST_AGENT_WARNING_THRESHOLD:
+        logger.warning(
+            "Worst agent may not be producing true anti-optimal play — "
+            "win rate %.1f%% is not meaningfully below 50%%",
+            win_rate * 100,
+        )
+    return win_rate
 
 
 def train_agent(
@@ -109,5 +150,17 @@ def train_agent(
             output_path + ".zip",
             metadata_path,
         )
+
+        if agent_type == "worst":
+            try:
+                val_win_rate = validate_worst_agent(model, adapter)
+                with open(metadata_path) as f:
+                    meta = json.load(f)
+                meta["validation_win_rate"] = val_win_rate
+                meta["validation_games"] = 1000
+                with open(metadata_path, "w") as f:
+                    json.dump(meta, f, indent=2)
+            except Exception as e:
+                logger.warning("Validation failed: %s", e)
     finally:
         env.close()

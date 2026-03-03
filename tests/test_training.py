@@ -15,7 +15,7 @@ from gym_env.engine_adapter import (
     PlayerInfo,
     TrickCard,
 )
-from training.train import WinRateCallback, train_agent
+from training.train import WORST_AGENT_WARNING_THRESHOLD, WinRateCallback, train_agent, validate_worst_agent
 
 
 # --- Helpers ---
@@ -365,3 +365,222 @@ def test_integration_train_agent(tmp_path):
     cb = captured_callbacks[0]
     assert cb.games_played > 0, "WinRateCallback should have tracked at least 1 game"
     assert cb.win_rate > 0.0, "Win rate should be > 0 (all games are wins in mock)"
+
+
+@pytest.mark.integration
+def test_integration_train_worst_agent(tmp_path):
+    """Real SB3 + mocked adapter for worst agent — verify training + validation end-to-end."""
+    adapter = _mock_adapter_for_integration()
+    output_path = str(tmp_path / "worst_agent_test")
+
+    # Mock validate_worst_agent to avoid running real eval loop (adapter returns wins, not losses)
+    with patch("training.train.RESTAdapter", return_value=adapter), \
+         patch("training.train.validate_worst_agent", return_value=0.2) as mock_validate:
+        train_agent(
+            agent_type="worst",
+            total_timesteps=100,
+            seed=42,
+            output_path=output_path,
+        )
+
+    # Verify model file created (SB3 appends .zip)
+    assert os.path.exists(output_path + ".zip")
+
+    # Verify metadata file created with validation fields
+    metadata_path = output_path + ".json"
+    assert os.path.exists(metadata_path)
+    with open(metadata_path) as f:
+        metadata = json.load(f)
+    assert metadata["agent_type"] == "worst"
+    assert metadata["validation_win_rate"] == 0.2
+    assert metadata["validation_games"] == 1000
+
+    # Verify validation was called with model and adapter
+    mock_validate.assert_called_once()
+    call_args = mock_validate.call_args
+    assert call_args[0][1] is adapter  # adapter argument
+
+
+# --- validate_worst_agent() Unit Tests ---
+
+class TestValidateWorstAgent:
+    """Unit tests for validate_worst_agent() with mocked env."""
+
+    def _mock_env_and_model(self, results):
+        """Create mock model and env that produce given game results."""
+        mock_model = MagicMock()
+        mock_adapter = MagicMock(spec=EngineAdapter)
+
+        obs = np.zeros(42, dtype=np.float32)
+        action_array = np.array([0])
+        mock_model.predict.return_value = (action_array, None)
+
+        # Track game index
+        game_idx = {"i": 0}
+
+        def mock_reset(**kwargs):
+            return obs, {}
+
+        def mock_step(action):
+            result = results[game_idx["i"]]
+            game_idx["i"] += 1
+            info = {"game_result": result}
+            return obs, 0.0, True, False, info
+
+        return mock_model, mock_adapter, mock_reset, mock_step
+
+    @patch("training.train.BriscasEnv")
+    def test_returns_correct_win_rate(self, mock_env_cls):
+        results = ["win", "loss", "loss", "win", "loss"]  # 2/5 = 0.4
+        mock_model, mock_adapter, mock_reset, mock_step = self._mock_env_and_model(results)
+        mock_env = MagicMock()
+        mock_env.reset = mock_reset
+        mock_env.step = mock_step
+        mock_env_cls.return_value = mock_env
+
+        rate = validate_worst_agent(mock_model, mock_adapter, num_games=5)
+        assert rate == pytest.approx(0.4)
+
+    @patch("training.train.BriscasEnv")
+    def test_warning_logged_when_win_rate_above_threshold(self, mock_env_cls, caplog):
+        # All wins → 1.0 > 0.45 → warning
+        results = ["win"] * 5
+        mock_model, mock_adapter, mock_reset, mock_step = self._mock_env_and_model(results)
+        mock_env = MagicMock()
+        mock_env.reset = mock_reset
+        mock_env.step = mock_step
+        mock_env_cls.return_value = mock_env
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="training.train"):
+            validate_worst_agent(mock_model, mock_adapter, num_games=5)
+
+        assert any("anti-optimal" in r.message for r in caplog.records)
+
+    @patch("training.train.BriscasEnv")
+    def test_no_warning_when_win_rate_below_threshold(self, mock_env_cls, caplog):
+        # All losses → 0.0 < 0.45 → no warning
+        results = ["loss"] * 5
+        mock_model, mock_adapter, mock_reset, mock_step = self._mock_env_and_model(results)
+        mock_env = MagicMock()
+        mock_env.reset = mock_reset
+        mock_env.step = mock_step
+        mock_env_cls.return_value = mock_env
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="training.train"):
+            validate_worst_agent(mock_model, mock_adapter, num_games=5)
+
+        assert not any("anti-optimal" in r.message for r in caplog.records)
+
+    @patch("training.train.BriscasEnv")
+    def test_env_close_called_on_exception(self, mock_env_cls):
+        mock_model = MagicMock()
+        mock_adapter = MagicMock(spec=EngineAdapter)
+        mock_env = MagicMock()
+        mock_env.reset.side_effect = EngineConnectionError("Engine down")
+        mock_env_cls.return_value = mock_env
+
+        with pytest.raises(EngineConnectionError):
+            validate_worst_agent(mock_model, mock_adapter, num_games=5)
+
+        mock_env.close.assert_called_once()
+
+    @patch("training.train.BriscasEnv")
+    def test_env_created_with_reward_scale_1(self, mock_env_cls):
+        results = ["loss"] * 3
+        mock_model, mock_adapter, mock_reset, mock_step = self._mock_env_and_model(results)
+        mock_env = MagicMock()
+        mock_env.reset = mock_reset
+        mock_env.step = mock_step
+        mock_env_cls.return_value = mock_env
+
+        validate_worst_agent(mock_model, mock_adapter, num_games=3)
+
+        mock_env_cls.assert_called_once_with(adapter=mock_adapter, reward_scale=1.0)
+
+
+# --- train_agent() validation integration tests ---
+
+class TestTrainAgentValidation:
+    """Tests for validation integration in train_agent()."""
+
+    @patch("training.train.validate_worst_agent")
+    @patch("training.train.RESTAdapter")
+    @patch("training.train.DQN")
+    @patch("training.train.CheckpointCallback")
+    def test_validation_failure_caught_gracefully(self, mock_checkpoint, mock_dqn, mock_adapter, mock_validate, tmp_path):
+        mock_model = MagicMock()
+        mock_dqn.return_value = mock_model
+        mock_adapter_instance = MagicMock(spec=EngineAdapter)
+        mock_adapter_instance.new_game.return_value = _state()
+        mock_adapter.return_value = mock_adapter_instance
+        mock_validate.side_effect = EngineConnectionError("Engine down during validation")
+
+        output_path = str(tmp_path / "worst_agent")
+        # Should NOT raise — validation failure is non-fatal
+        train_agent("worst", 100, 42, output_path)
+
+        # Base metadata should still exist
+        with open(output_path + ".json") as f:
+            metadata = json.load(f)
+        assert metadata["agent_type"] == "worst"
+        assert "validation_win_rate" not in metadata
+        assert "validation_games" not in metadata
+
+    @patch("training.train.validate_worst_agent", return_value=0.3)
+    @patch("training.train.RESTAdapter")
+    @patch("training.train.DQN")
+    @patch("training.train.CheckpointCallback")
+    def test_metadata_includes_validation_fields_for_worst(self, mock_checkpoint, mock_dqn, mock_adapter, mock_validate, tmp_path):
+        mock_model = MagicMock()
+        mock_dqn.return_value = mock_model
+        mock_adapter_instance = MagicMock(spec=EngineAdapter)
+        mock_adapter_instance.new_game.return_value = _state()
+        mock_adapter.return_value = mock_adapter_instance
+
+        output_path = str(tmp_path / "worst_agent")
+        train_agent("worst", 100, 42, output_path)
+
+        with open(output_path + ".json") as f:
+            metadata = json.load(f)
+        assert metadata["validation_win_rate"] == 0.3
+        assert metadata["validation_games"] == 1000
+
+    @patch("training.train.RESTAdapter")
+    @patch("training.train.DQN")
+    @patch("training.train.CheckpointCallback")
+    def test_metadata_no_validation_fields_for_best(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
+        mock_model = MagicMock()
+        mock_dqn.return_value = mock_model
+        mock_adapter_instance = MagicMock(spec=EngineAdapter)
+        mock_adapter_instance.new_game.return_value = _state()
+        mock_adapter.return_value = mock_adapter_instance
+
+        output_path = str(tmp_path / "best_agent")
+        train_agent("best", 100, 42, output_path)
+
+        with open(output_path + ".json") as f:
+            metadata = json.load(f)
+        assert "validation_win_rate" not in metadata
+        assert "validation_games" not in metadata
+
+    @patch("training.train.validate_worst_agent")
+    @patch("training.train.RESTAdapter")
+    @patch("training.train.DQN")
+    @patch("training.train.CheckpointCallback")
+    def test_metadata_no_validation_fields_when_validation_fails(self, mock_checkpoint, mock_dqn, mock_adapter, mock_validate, tmp_path):
+        mock_model = MagicMock()
+        mock_dqn.return_value = mock_model
+        mock_adapter_instance = MagicMock(spec=EngineAdapter)
+        mock_adapter_instance.new_game.return_value = _state()
+        mock_adapter.return_value = mock_adapter_instance
+        mock_validate.side_effect = RuntimeError("Unexpected error")
+
+        output_path = str(tmp_path / "worst_agent")
+        train_agent("worst", 100, 42, output_path)
+
+        with open(output_path + ".json") as f:
+            metadata = json.load(f)
+        assert "validation_win_rate" not in metadata
+        assert "validation_games" not in metadata
