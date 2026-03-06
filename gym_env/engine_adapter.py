@@ -151,7 +151,7 @@ class RESTAdapter(EngineAdapter):
         self._session.mount("https://", adapter)
 
     def new_game(self) -> GameState:
-        data = self._post("/api/game/new", json={"player_name": "rl_agent", "ai_difficulty": "basic"})
+        data = self._post("/api/game/new", json={"player_name": "rl_agent", "ai_difficulty": "advanced"})
         return _parse_game_state(data["state"])
 
     def play_card(self, card_index: int) -> GameState:

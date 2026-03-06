@@ -96,7 +96,7 @@ class TestRESTAdapterNewGame:
                 "POST",
                 "http://localhost:5000/api/game/new",
                 timeout=RESTAdapter.DEFAULT_TIMEOUT,
-                json={"player_name": "rl_agent", "ai_difficulty": "basic"},
+                json={"player_name": "rl_agent", "ai_difficulty": "advanced"},
             )
 
         assert isinstance(state, GameState)
