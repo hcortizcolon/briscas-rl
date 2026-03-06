@@ -120,7 +120,7 @@ class TestRESTAdapterPlayCard:
             state = adapter.play_card(0)
             mock_req.assert_called_once_with(
                 "POST",
-                "http://localhost:5000/api/game/play",
+                "http://127.0.0.1:5000/api/game/play",
                 timeout=RESTAdapter.DEFAULT_TIMEOUT,
                 json={"card_index": 0},
             )
@@ -138,7 +138,7 @@ class TestRESTAdapterProcessAI:
         with patch.object(adapter._session, "request", return_value=resp) as mock_req:
             state = adapter.process_ai_turn()
             mock_req.assert_called_once_with(
-                "POST", "http://localhost:5000/api/game/process-ai",
+                "POST", "http://127.0.0.1:5000/api/game/process-ai",
                 timeout=RESTAdapter.DEFAULT_TIMEOUT,
             )
 
@@ -154,7 +154,7 @@ class TestRESTAdapterGetState:
         with patch.object(adapter._session, "request", return_value=resp) as mock_req:
             state = adapter.get_state()
             mock_req.assert_called_once_with(
-                "GET", "http://localhost:5000/api/game/state",
+                "GET", "http://127.0.0.1:5000/api/game/state",
                 timeout=RESTAdapter.DEFAULT_TIMEOUT,
             )
 
@@ -171,7 +171,7 @@ class TestRESTAdapterDeleteGame:
         with patch.object(adapter._session, "request", return_value=resp) as mock_req:
             adapter.delete_game()
             mock_req.assert_called_once_with(
-                "DELETE", "http://localhost:5000/api/game/delete",
+                "DELETE", "http://127.0.0.1:5000/api/game/delete",
                 timeout=RESTAdapter.DEFAULT_TIMEOUT,
             )
 

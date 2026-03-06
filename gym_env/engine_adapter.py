@@ -1,6 +1,8 @@
 """Engine adapter interface and REST implementation for Briscas game engine."""
 
 import logging
+import socket
+import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -123,16 +125,37 @@ class RESTAdapter(EngineAdapter):
 
     DEFAULT_TIMEOUT = 10
 
-    def __init__(self, base_url: str = "http://localhost:5000") -> None:
+    def __init__(self, base_url: str = "http://127.0.0.1:5000") -> None:
         self._base_url = base_url.rstrip("/")
         self._session = requests.Session()
+        # The game engine (Flask dev server) sends Connection: close, so every
+        # request creates a new TCP socket.  Use SO_LINGER with timeout 0 to
+        # send RST on close, avoiding TIME_WAIT port exhaustion during training.
+        linger = struct.pack("ii", 1, 0)
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=1,
+            pool_maxsize=1,
+            max_retries=0,
+            pool_block=True,
+        )
+        adapter.init_poolmanager(
+            1,  # num_pools (positional — required by HTTPAdapter)
+            1,  # maxsize
+            block=True,
+            socket_options=[
+                (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1),
+                (socket.SOL_SOCKET, socket.SO_LINGER, linger),
+            ],
+        )
+        self._session.mount("http://", adapter)
+        self._session.mount("https://", adapter)
 
     def new_game(self) -> GameState:
         data = self._post("/api/game/new", json={"player_name": "rl_agent", "ai_difficulty": "basic"})
         return _parse_game_state(data["state"])
 
     def play_card(self, card_index: int) -> GameState:
-        data = self._post("/api/game/play", json={"card_index": card_index})
+        data = self._post("/api/game/play", json={"card_index": int(card_index)})
         return _parse_game_state(data["state"])
 
     def process_ai_turn(self) -> GameState:
@@ -165,8 +188,13 @@ class RESTAdapter(EngineAdapter):
                 f"Cannot connect to game engine at {self._base_url}: {exc}"
             ) from exc
         except requests.HTTPError as exc:
+            body = ""
+            try:
+                body = response.text
+            except Exception:
+                pass
             raise EngineConnectionError(
-                f"Game engine returned error {response.status_code} for {method} {path}: {exc}"
+                f"Game engine returned error {response.status_code} for {method} {path}: {exc} | Body: {body}"
             ) from exc
         except requests.RequestException as exc:
             raise EngineConnectionError(

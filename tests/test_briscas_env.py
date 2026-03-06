@@ -358,6 +358,8 @@ class TestResetClears:
             TrickCard(player="ai", card=_card(12, "Oros", 4)),
         ]
         adapter.play_card.return_value = _state(trick=trick, is_your_turn=True)
+        # Trick complete (2 cards) with cards remaining — process_ai_turn resolves it
+        adapter.process_ai_turn.return_value = _state(trick=[], is_your_turn=True)
         env.step(0)
 
         # Reset should clear cards_seen
@@ -456,7 +458,18 @@ class TestFullGameLoop:
             winner="rl_agent",
         )
 
+        # Trick complete (2 cards) with cards remaining — process_ai_turn resolves it
+        after_t1_resolved = _state(
+            hand=[_card(3, "Copas", 10), _card(7, "Espadas"), _card(6, "Bastos")],
+            trump=trump,
+            trick=[],
+            players=_players(11, 0),
+            is_your_turn=True,
+            game_over=False,
+        )
+
         adapter.play_card.side_effect = [after_t1, after_t2]
+        adapter.process_ai_turn.return_value = after_t1_resolved
 
         env = BriscasEnv(adapter=adapter)
         obs, _ = env.reset()
@@ -511,7 +524,7 @@ class TestOpponentLeadsAfterWinningTrick:
         ]
         after_play = _state(trick=trick, is_your_turn=False, game_over=False)
 
-        # process_ai_turn resolves trick, opponent leads — trick is now cleared/new
+        # process_ai_turn resolves trick; opponent leads — now it's our turn
         after_ai = _state(trick=[], is_your_turn=True, game_over=False)
 
         adapter.play_card.return_value = after_play

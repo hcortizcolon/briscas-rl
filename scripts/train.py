@@ -40,7 +40,7 @@ def main() -> None:
     parser.add_argument(
         "--engine-url",
         type=str,
-        default="http://localhost:5000",
+        default="http://127.0.0.1:5000",
         help="Game engine URL.",
     )
     parser.add_argument(

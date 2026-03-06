@@ -67,12 +67,28 @@ class BriscasEnv(gymnasium.Env):
         return self._get_observation(), reward, terminated, False, info
 
     def _execute_turn(self, card_index: int) -> GameState:
-        """Play card and loop process_ai_turn until it's our turn or game over."""
+        """Play card and loop until it's our turn or game over.
+
+        The engine returns unresolved state when a trick is complete (2 cards).
+        Normally process_ai_turn resolves the trick, but on the final trick
+        (empty hand, empty deck) the AI has no cards left so we must use
+        get_state instead.
+        """
         state = self._adapter.play_card(card_index)
         self._update_cards_seen(state)
-        while not state.is_your_turn and not state.game_over:
-            state = self._adapter.process_ai_turn()
-            self._update_cards_seen(state)
+        while not state.game_over:
+            if len(state.trick) >= 2:
+                if len(state.hand) == 0 and state.deck_remaining == 0:
+                    # Final trick — AI has no cards; resolve via get_state
+                    state = self._adapter.get_state()
+                else:
+                    state = self._adapter.process_ai_turn()
+                self._update_cards_seen(state)
+            elif not state.is_your_turn:
+                state = self._adapter.process_ai_turn()
+                self._update_cards_seen(state)
+            else:
+                break
         return state
 
     def _get_observation(self) -> np.ndarray:

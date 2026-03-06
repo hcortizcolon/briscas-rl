@@ -140,7 +140,7 @@ def train_agent(
     total_timesteps: int,
     seed: int,
     output_path: str,
-    engine_url: str = "http://localhost:5000",
+    engine_url: str = "http://127.0.0.1:5000",
     checkpoint_freq: int = 10000,
 ) -> None:
     """Train a DQN agent against the engine's built-in random player."""
