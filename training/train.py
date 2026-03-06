@@ -170,7 +170,11 @@ def train_agent(
         # Create output directories before training
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-        model.learn(total_timesteps=total_timesteps, callback=[checkpoint_cb, winrate_cb])
+        model.learn(
+            total_timesteps=total_timesteps,
+            callback=[checkpoint_cb, winrate_cb],
+            reset_num_timesteps=resume_from is None,
+        )
 
         # Save model and metadata
         model.save(output_path)

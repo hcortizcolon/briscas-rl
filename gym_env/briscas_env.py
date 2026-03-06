@@ -46,7 +46,11 @@ class BriscasEnv(gymnasium.Env):
         if hand_size == 0:
             raise ValueError("Cannot call step() with an empty hand (game is over)")
         masked_action = action % hand_size
-        self._state = self._execute_turn(masked_action)
+        # The observation encodes the hand sorted by card ID, so the agent's
+        # action index refers to the sorted order.  Map it back to the engine's
+        # hand index so the intended card is actually played.
+        engine_index = self._sorted_hand_index(masked_action)
+        self._state = self._execute_turn(engine_index)
 
         info = {}
         if self._state.game_over:
@@ -65,6 +69,12 @@ class BriscasEnv(gymnasium.Env):
             terminated = False
 
         return self._get_observation(), reward, terminated, False, info
+
+    def _sorted_hand_index(self, sorted_idx: int) -> int:
+        """Map an index in the sorted hand back to the engine's hand index."""
+        hand = self._state.hand
+        order = sorted(range(len(hand)), key=lambda i: encode_card(hand[i]))
+        return order[sorted_idx]
 
     def _execute_turn(self, card_index: int) -> GameState:
         """Play card and loop until it's our turn or game over.
