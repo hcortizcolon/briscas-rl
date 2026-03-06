@@ -49,6 +49,12 @@ def main() -> None:
         default=10000,
         help="Checkpoint save frequency in timesteps.",
     )
+    parser.add_argument(
+        "--resume-from",
+        type=str,
+        default=None,
+        help="Path to an existing model (.zip optional) to continue training from.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -69,6 +75,7 @@ def main() -> None:
         output_path=output_path,
         engine_url=args.engine_url,
         checkpoint_freq=args.checkpoint_freq,
+        resume_from=args.resume_from,
     )
 
 

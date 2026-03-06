@@ -142,6 +142,7 @@ def train_agent(
     output_path: str,
     engine_url: str = "http://127.0.0.1:5000",
     checkpoint_freq: int = 10000,
+    resume_from: str | None = None,
 ) -> None:
     """Train a DQN agent against the engine's built-in random player."""
     reward_scale = -1.0 if agent_type == "worst" else 1.0
@@ -153,7 +154,11 @@ def train_agent(
         env.reset()
         logger.info("Engine connection verified at %s", engine_url)
 
-        model = DQN("MlpPolicy", env, verbose=1, learning_starts=1000, seed=seed)
+        if resume_from is not None:
+            model = DQN.load(resume_from, env=env)
+            logger.info("Resuming training from %s", resume_from)
+        else:
+            model = DQN("MlpPolicy", env, verbose=1, learning_starts=1000, seed=seed)
 
         checkpoint_cb = CheckpointCallback(
             save_freq=checkpoint_freq,
@@ -177,6 +182,8 @@ def train_agent(
             "reward_type": "normalized_differential",
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
+        if resume_from is not None:
+            metadata["resume_from"] = resume_from
         metadata_path = output_path + ".json"
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)

@@ -276,6 +276,45 @@ class TestTrainAgentUnit:
     @patch("training.train.RESTAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
+    def test_resume_loads_existing_model_instead_of_new_dqn(
+        self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path
+    ):
+        mock_model = MagicMock()
+        mock_dqn.load.return_value = mock_model
+        mock_adapter_instance = MagicMock(spec=EngineAdapter)
+        mock_adapter_instance.new_game.return_value = _state()
+        mock_adapter.return_value = mock_adapter_instance
+
+        resume_path = str(tmp_path / "existing_model")
+        train_agent("best", 1000, 42, str(tmp_path / "test_model"), resume_from=resume_path)
+
+        mock_dqn.assert_not_called()
+        mock_dqn.load.assert_called_once()
+        args, kwargs = mock_dqn.load.call_args
+        assert args[0] == resume_path
+        assert "env" in kwargs
+
+    @patch("training.train.RESTAdapter")
+    @patch("training.train.DQN")
+    @patch("training.train.CheckpointCallback")
+    def test_resume_metadata_includes_resume_source(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
+        mock_model = MagicMock()
+        mock_dqn.load.return_value = mock_model
+        mock_adapter_instance = MagicMock(spec=EngineAdapter)
+        mock_adapter_instance.new_game.return_value = _state()
+        mock_adapter.return_value = mock_adapter_instance
+
+        output_path = str(tmp_path / "best_agent_5k")
+        resume_path = str(tmp_path / "existing_model")
+        train_agent("best", 5000, 42, output_path, resume_from=resume_path)
+
+        with open(output_path + ".json") as f:
+            metadata = json.load(f)
+        assert metadata["resume_from"] == resume_path
+
+    @patch("training.train.RESTAdapter")
+    @patch("training.train.DQN")
+    @patch("training.train.CheckpointCallback")
     def test_learn_called_with_timesteps_and_callbacks(self, mock_checkpoint, mock_dqn, mock_adapter):
         mock_model = MagicMock()
         mock_dqn.return_value = mock_model
