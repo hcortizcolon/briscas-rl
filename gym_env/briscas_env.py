@@ -9,6 +9,14 @@ from gym_env.engine_adapter import EngineAdapter, GameState
 from gym_env.observation import (
     OBSERVATION_SIZE,
     TOTAL_POINTS,
+    BITMAP_START,
+    BITMAP_END,
+    TRUMP_ID,
+    TRUMP_SUIT,
+    TRICK_START,
+    DECK_REMAINING,
+    AGENT_SCORE,
+    OPPONENT_SCORE,
     SUIT_INDEX,
     build_observation_space,
     encode_card,
@@ -103,32 +111,37 @@ class BriscasEnv(gymnasium.Env):
 
     def _get_observation(self) -> np.ndarray:
         """Single source of truth for observation encoding."""
-        obs = np.full(OBSERVATION_SIZE, -1.0, dtype=np.float32)
+        obs = np.zeros(OBSERVATION_SIZE, dtype=np.float32)
         state = self._state
 
         # Hand cards (sorted by card ID, padded with -1)
+        obs[0:3] = -1.0
         hand_ids = sorted(encode_card(c) for c in state.hand)
         for i, cid in enumerate(hand_ids):
             obs[i] = cid
 
         # Trump card and suit
-        obs[3] = encode_card(state.trump)
-        obs[4] = SUIT_INDEX[state.trump.suit]
+        obs[TRUMP_ID] = encode_card(state.trump)
+        obs[TRUMP_SUIT] = SUIT_INDEX[state.trump.suit]
 
         # Trick cards
+        obs[TRICK_START:TRICK_START + 2] = -1.0
         for i, tc in enumerate(state.trick):
-            obs[5 + i] = encode_card(tc.card)
+            obs[TRICK_START + i] = encode_card(tc.card)
 
-        # Cards seen per suit (indices 7-10, default 0)
-        for i in range(4):
-            obs[7 + i] = sum(1 for cid in self._cards_seen if cid // 10 == i)
+        # Cards-played bitmap (40 binary flags)
+        for cid in self._cards_seen:
+            obs[BITMAP_START + cid] = 1.0
 
-        # Agent and opponent points
+        # Deck remaining
+        obs[DECK_REMAINING] = state.deck_remaining
+
+        # Agent and opponent scores
         for p in state.players:
             if p.is_human:
-                obs[11] = p.score
+                obs[AGENT_SCORE] = p.score
             else:
-                obs[12] = p.score
+                obs[OPPONENT_SCORE] = p.score
 
         return obs
 

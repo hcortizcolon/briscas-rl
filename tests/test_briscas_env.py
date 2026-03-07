@@ -8,7 +8,14 @@ import pytest
 
 from gym_env.engine_adapter import Card, EngineAdapter, GameState, PlayerInfo, TrickCard
 from gym_env.briscas_env import BriscasEnv
-from gym_env.observation import encode_card
+from gym_env.observation import (
+    OBSERVATION_SIZE,
+    BITMAP_START,
+    DECK_REMAINING,
+    AGENT_SCORE,
+    OPPONENT_SCORE,
+    encode_card,
+)
 
 
 # --- Fixtures ---
@@ -74,12 +81,12 @@ def _make_env(adapter: EngineAdapter | None = None) -> BriscasEnv:
 # --- Test Classes ---
 
 class TestObservationShape:
-    """Test observation shape is (13,) and dtype is float32."""
+    """Test observation shape and dtype."""
 
     def test_reset_observation_shape(self):
         env = _make_env()
         obs, info = env.reset()
-        assert obs.shape == (13,)
+        assert obs.shape == (OBSERVATION_SIZE,)
 
     def test_reset_observation_dtype(self):
         env = _make_env()
@@ -101,12 +108,22 @@ class TestObservationValues:
         obs, _ = env.reset()
 
         # h0=encode(1 Oros)=0, h1=encode(3 Copas)=12, h2=encode(7 Espadas)=26
+        assert obs[0] == 0.0
+        assert obs[1] == 12.0
+        assert obs[2] == 26.0
         # trump=encode(5 Bastos)=34, trump_suit=3
+        assert obs[3] == 34.0
+        assert obs[4] == 3.0
         # trick empty: -1, -1
-        # cards_seen: all 0
-        # agent_points=15, opp_points=22
-        expected = np.array([0, 12, 26, 34, 3, -1, -1, 0, 0, 0, 0, 15, 22], dtype=np.float32)
-        np.testing.assert_array_equal(obs, expected)
+        assert obs[5] == -1.0
+        assert obs[6] == -1.0
+        # bitmap: all 0 (no cards played yet)
+        assert np.all(obs[BITMAP_START:BITMAP_START + 40] == 0.0)
+        # deck remaining
+        assert obs[DECK_REMAINING] == 30.0
+        # scores
+        assert obs[AGENT_SCORE] == 15.0
+        assert obs[OPPONENT_SCORE] == 22.0
 
 
 class TestHandSorting:
@@ -365,11 +382,8 @@ class TestResetClears:
         # Reset should clear cards_seen
         adapter.new_game.return_value = _state()
         obs, _ = env.reset()
-        # After reset, cards_seen should be empty so suit counts are all 0
-        assert obs[7] == 0.0  # s0
-        assert obs[8] == 0.0  # s1
-        assert obs[9] == 0.0  # s2
-        assert obs[10] == 0.0  # s3
+        # After reset, cards_seen should be empty so bitmap is all zeros
+        assert np.all(obs[BITMAP_START:BITMAP_START + 40] == 0.0)
 
 
 class TestResetReturnType:
@@ -473,14 +487,14 @@ class TestFullGameLoop:
 
         env = BriscasEnv(adapter=adapter)
         obs, _ = env.reset()
-        assert obs.shape == (13,)
+        assert obs.shape == (OBSERVATION_SIZE,)
 
         # Step 1
         obs1, r1, term1, trunc1, _ = env.step(0)
         assert r1 == 0.0
         assert term1 is False
         assert trunc1 is False
-        assert obs1.shape == (13,)
+        assert obs1.shape == (OBSERVATION_SIZE,)
         # Observation should differ from initial (different hand, trick visible, score changed)
         assert not np.array_equal(obs, obs1)
 
@@ -534,12 +548,13 @@ class TestOpponentLeadsAfterWinningTrick:
         env.reset()
         obs, _, _, _, _ = env.step(0)
 
-        # Cards from the resolved trick must appear in cards_seen counts
-        # Oros 1 (card ID 0) and Oros 12 (card ID 9) → 2 Oros cards seen
-        assert obs[7] == 2.0   # s0 = Oros count
-        assert obs[8] == 0.0   # s1 = Copas count
-        assert obs[9] == 0.0   # s2 = Espadas count
-        assert obs[10] == 0.0  # s3 = Bastos count
+        # Cards from the resolved trick must appear in the bitmap
+        # Oros 1 (card ID 0) and Oros 12 (card ID 9)
+        assert obs[BITMAP_START + 0] == 1.0   # Oros 1 seen
+        assert obs[BITMAP_START + 9] == 1.0   # Oros 12 seen
+        # Other cards not seen
+        assert obs[BITMAP_START + 1] == 0.0
+        assert obs[BITMAP_START + 10] == 0.0
 
 
 class TestStepGuards:

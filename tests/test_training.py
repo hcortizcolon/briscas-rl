@@ -779,8 +779,9 @@ def test_integration_load_agent(tmp_path):
     # Now load the model with load_agent
     model, metadata = load_agent(output_path)
 
-    # Verify model can predict (observation space is 13-dim)
-    obs = np.zeros(13, dtype=np.float32)
+    # Verify model can predict with current observation space
+    from gym_env.observation import OBSERVATION_SIZE
+    obs = np.zeros(OBSERVATION_SIZE, dtype=np.float32)
     action, _states = model.predict(obs, deterministic=True)
     assert isinstance(action, np.ndarray)
     assert 0 <= action.item() <= 2, f"Action {action.item()} out of valid range [0, 2]"

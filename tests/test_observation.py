@@ -6,6 +6,15 @@ import pytest
 from gym_env.observation import (
     OBSERVATION_SIZE,
     TOTAL_POINTS,
+    NUM_CARDS,
+    BITMAP_START,
+    BITMAP_END,
+    TRUMP_ID,
+    TRUMP_SUIT,
+    TRICK_START,
+    DECK_REMAINING,
+    AGENT_SCORE,
+    OPPONENT_SCORE,
     build_observation_space,
     encode_card,
     SUIT_INDEX,
@@ -63,53 +72,65 @@ class TestSuitAndRankMappings:
 
 
 class TestObservationSpace:
-    """Test observation_space bounds match expected low/high per element."""
+    """Test observation_space bounds match expected layout."""
 
     def test_shape(self):
         space = build_observation_space()
-        assert space.shape == (13,)
+        assert space.shape == (OBSERVATION_SIZE,)
+
+    def test_observation_size_is_50(self):
+        assert OBSERVATION_SIZE == 50
 
     def test_dtype(self):
         space = build_observation_space()
         assert space.dtype == np.float32
 
-    def test_low_bounds(self):
+    def test_hand_bounds(self):
         space = build_observation_space()
-        expected_low = np.array([-1, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0], dtype=np.float32)
-        np.testing.assert_array_equal(space.low, expected_low)
+        for i in range(3):
+            assert space.low[i] == -1
+            assert space.high[i] == 39
 
-    def test_high_bounds(self):
+    def test_trump_bounds(self):
         space = build_observation_space()
-        expected_high = np.array([39, 39, 39, 39, 3, 39, 39, 10, 10, 10, 10, 120, 120], dtype=np.float32)
-        np.testing.assert_array_equal(space.high, expected_high)
+        assert space.low[TRUMP_ID] == 0
+        assert space.high[TRUMP_ID] == 39
+        assert space.low[TRUMP_SUIT] == 0
+        assert space.high[TRUMP_SUIT] == 3
 
+    def test_trick_bounds(self):
+        space = build_observation_space()
+        for i in range(2):
+            assert space.low[TRICK_START + i] == -1
+            assert space.high[TRICK_START + i] == 39
 
-class TestCardSeenPerSuitCounts:
-    """Test cards_seen_per_suit counts derived correctly from card ID set."""
+    def test_bitmap_bounds(self):
+        space = build_observation_space()
+        for i in range(BITMAP_START, BITMAP_END):
+            assert space.low[i] == 0
+            assert space.high[i] == 1
 
-    def test_empty_set(self):
-        cards_seen: set[int] = set()
-        counts = [sum(1 for cid in cards_seen if cid // 10 == s) for s in range(4)]
-        assert counts == [0, 0, 0, 0]
+    def test_deck_remaining_bounds(self):
+        space = build_observation_space()
+        assert space.low[DECK_REMAINING] == 0
+        assert space.high[DECK_REMAINING] == 34
 
-    def test_mixed_suits(self):
-        # card IDs: 0 (Oros), 1 (Oros), 10 (Copas), 20 (Espadas), 30 (Bastos), 31 (Bastos)
-        cards_seen = {0, 1, 10, 20, 30, 31}
-        counts = [sum(1 for cid in cards_seen if cid // 10 == s) for s in range(4)]
-        assert counts == [2, 1, 1, 2]
-
-    def test_all_cards_of_one_suit(self):
-        # All 10 Oros cards: IDs 0-9
-        cards_seen = set(range(10))
-        counts = [sum(1 for cid in cards_seen if cid // 10 == s) for s in range(4)]
-        assert counts == [10, 0, 0, 0]
+    def test_score_bounds(self):
+        space = build_observation_space()
+        assert space.low[AGENT_SCORE] == 0
+        assert space.high[AGENT_SCORE] == 120
+        assert space.low[OPPONENT_SCORE] == 0
+        assert space.high[OPPONENT_SCORE] == 120
 
 
 class TestConstants:
     """Test constants are correctly defined."""
 
-    def test_observation_size(self):
-        assert OBSERVATION_SIZE == 13
+    def test_num_cards(self):
+        assert NUM_CARDS == 40
 
     def test_total_points(self):
         assert TOTAL_POINTS == 120
+
+    def test_bitmap_span(self):
+        assert BITMAP_END - BITMAP_START == NUM_CARDS
