@@ -29,6 +29,8 @@ class WinRateCallback(BaseCallback):
         self._results: deque[str] = deque(maxlen=window_size)
         self.games_played: int = 0
         self.win_rate: float = 0.0
+        self.loss_rate: float = 0.0
+        self.draw_rate: float = 0.0
 
     def _on_step(self) -> bool:
         dones = self.locals["dones"]
@@ -37,8 +39,10 @@ class WinRateCallback(BaseCallback):
             result = infos[0].get("game_result", "unknown")
             self._results.append(result)
             self.games_played += 1
-            wins = sum(1 for r in self._results if r == "win")
-            self.win_rate = wins / len(self._results)
+            n = len(self._results)
+            self.win_rate = sum(1 for r in self._results if r == "win") / n
+            self.loss_rate = sum(1 for r in self._results if r == "loss") / n
+            self.draw_rate = sum(1 for r in self._results if r == "draw") / n
 
             if self.games_played == 1:
                 logger.info(
@@ -158,7 +162,14 @@ def train_agent(
             model = DQN.load(resume_from, env=env)
             logger.info("Resuming training from %s", resume_from)
         else:
-            model = DQN("MlpPolicy", env, verbose=1, learning_starts=1000, seed=seed)
+            model = DQN(
+                "MlpPolicy",
+                env,
+                verbose=1,
+                learning_starts=1000,
+                seed=seed,
+                policy_kwargs={"net_arch": [256, 256]},
+            )
 
         checkpoint_cb = CheckpointCallback(
             save_freq=checkpoint_freq,
@@ -194,13 +205,14 @@ def train_agent(
 
         logger.info(
             "Training complete | Agent: %s | Timesteps: %d | Games played: %d | "
-            "Win rate: %.1f%% | Model: %s | Metadata: %s",
+            "Win: %.1f%% | Loss: %.1f%% | Draw: %.1f%% | Model: %s",
             agent_type,
             total_timesteps,
             winrate_cb.games_played,
             winrate_cb.win_rate * 100,
+            winrate_cb.loss_rate * 100,
+            winrate_cb.draw_rate * 100,
             output_path + ".zip",
-            metadata_path,
         )
 
         # Close training env before validation to avoid shared adapter issues
