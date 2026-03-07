@@ -38,12 +38,6 @@ def main() -> None:
         help="Output path for model (no extension). Default: models/{agent}_agent_{timesteps}k",
     )
     parser.add_argument(
-        "--engine-url",
-        type=str,
-        default="http://127.0.0.1:5000",
-        help="Game engine URL.",
-    )
-    parser.add_argument(
         "--checkpoint-freq",
         type=int,
         default=10000,
@@ -73,7 +67,6 @@ def main() -> None:
         total_timesteps=args.timesteps,
         seed=args.seed,
         output_path=output_path,
-        engine_url=args.engine_url,
         checkpoint_freq=args.checkpoint_freq,
         resume_from=args.resume_from,
     )

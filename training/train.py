@@ -10,7 +10,7 @@ from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 from gym_env.briscas_env import BriscasEnv
-from gym_env.engine_adapter import RESTAdapter
+from gym_env.local_adapter import LocalAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -144,19 +144,18 @@ def train_agent(
     total_timesteps: int,
     seed: int,
     output_path: str,
-    engine_url: str = "http://127.0.0.1:5000",
     checkpoint_freq: int = 10000,
     resume_from: str | None = None,
 ) -> None:
-    """Train a DQN agent against the engine's built-in random player."""
+    """Train a DQN agent against the engine's built-in AI player."""
     reward_scale = -1.0 if agent_type == "worst" else 1.0
-    adapter = RESTAdapter(engine_url)
+    adapter = LocalAdapter()
     env = BriscasEnv(adapter=adapter, reward_scale=reward_scale)
 
     try:
-        # Pre-flight connectivity check
+        # Pre-flight check
         env.reset()
-        logger.info("Engine connection verified at %s", engine_url)
+        logger.info("Local game engine ready")
 
         if resume_from is not None:
             model = DQN.load(resume_from, env=env)

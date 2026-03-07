@@ -8,6 +8,7 @@ from gym_env.engine_adapter import (
     RESTAdapter,
     TrickCard,
 )
+from gym_env.local_adapter import LocalAdapter
 from gym_env.observation import (
     OBSERVATION_SIZE,
     TOTAL_POINTS,
@@ -21,6 +22,7 @@ __all__ = [
     "EngineAdapter",
     "EngineConnectionError",
     "GameState",
+    "LocalAdapter",
     "OBSERVATION_SIZE",
     "PlayerInfo",
     "RESTAdapter",

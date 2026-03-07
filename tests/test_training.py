@@ -14,6 +14,7 @@ from gym_env.engine_adapter import (
     GameState,
     PlayerInfo,
 )
+from gym_env.local_adapter import LocalAdapter
 from training.train import VALIDATION_NUM_GAMES, WinRateCallback, load_agent, train_agent, validate_worst_agent
 
 
@@ -254,7 +255,7 @@ class TestWinRateCallback:
 class TestTrainAgentUnit:
     """Unit tests for train_agent() with mocked SB3."""
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_dqn_instantiated_with_correct_params(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
@@ -264,7 +265,7 @@ class TestTrainAgentUnit:
         mock_adapter_instance.new_game.return_value = _state()
         mock_adapter.return_value = mock_adapter_instance
 
-        train_agent("best", 1000, 42, str(tmp_path / "test_model"), "http://localhost:5000")
+        train_agent("best", 1000, 42, str(tmp_path / "test_model"))
 
         mock_dqn.assert_called_once()
         args, kwargs = mock_dqn.call_args
@@ -273,7 +274,7 @@ class TestTrainAgentUnit:
         assert kwargs["learning_starts"] == 1000
         assert kwargs["seed"] == 42
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_resume_loads_existing_model_instead_of_new_dqn(
@@ -294,7 +295,7 @@ class TestTrainAgentUnit:
         assert args[0] == resume_path
         assert "env" in kwargs
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_resume_metadata_includes_resume_source(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
@@ -312,7 +313,7 @@ class TestTrainAgentUnit:
             metadata = json.load(f)
         assert metadata["resume_from"] == resume_path
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_learn_called_with_timesteps_and_callbacks(self, mock_checkpoint, mock_dqn, mock_adapter):
@@ -329,7 +330,7 @@ class TestTrainAgentUnit:
         assert kwargs["total_timesteps"] == 5000
         assert len(kwargs["callback"]) == 2
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_model_saved_to_output_path(self, mock_checkpoint, mock_dqn, mock_adapter):
@@ -343,7 +344,7 @@ class TestTrainAgentUnit:
 
         mock_model.save.assert_called_once_with("/tmp/test_model")
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_metadata_json_written(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
@@ -366,7 +367,7 @@ class TestTrainAgentUnit:
         assert metadata["reward_type"] == "normalized_differential"
         assert "timestamp" in metadata
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_metadata_path_matches_model_path(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
@@ -382,7 +383,7 @@ class TestTrainAgentUnit:
         # model saves to output_path + ".zip" (SB3), metadata to output_path + ".json"
         assert os.path.exists(output_path + ".json")
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_worst_agent_uses_negative_reward_scale(self, mock_checkpoint, mock_dqn, mock_adapter):
@@ -400,7 +401,7 @@ class TestTrainAgentUnit:
         env = args[1]
         assert env.reward_scale == -1.0
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_best_agent_uses_positive_reward_scale(self, mock_checkpoint, mock_dqn, mock_adapter):
@@ -416,7 +417,7 @@ class TestTrainAgentUnit:
         env = args[1]
         assert env.reward_scale == 1.0
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     def test_preflight_check_raises_on_connection_error(self, mock_adapter):
         mock_adapter_instance = MagicMock(spec=EngineAdapter)
         mock_adapter_instance.new_game.side_effect = EngineConnectionError("Connection refused")
@@ -425,7 +426,7 @@ class TestTrainAgentUnit:
         with pytest.raises(EngineConnectionError):
             train_agent("best", 100, 42, "/tmp/test_model")
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_env_close_called_on_exception(self, mock_checkpoint, mock_dqn, mock_adapter):
@@ -442,7 +443,7 @@ class TestTrainAgentUnit:
         # env.close() should have been called via finally
         mock_adapter_instance.delete_game.assert_called()
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_dqn_learning_starts_1000(self, mock_checkpoint, mock_dqn, mock_adapter):
@@ -499,7 +500,7 @@ def test_integration_train_agent(tmp_path):
         captured_callbacks.append(cb)
         return cb
 
-    with patch("training.train.RESTAdapter", return_value=adapter), \
+    with patch("training.train.LocalAdapter", return_value=adapter), \
          patch("training.train.WinRateCallback", side_effect=_spy_winrate):
         train_agent(
             agent_type="best",
@@ -533,7 +534,7 @@ def test_integration_train_worst_agent(tmp_path):
     adapter = _mock_adapter_for_integration()
     output_path = str(tmp_path / "worst_agent_test")
 
-    with patch("training.train.RESTAdapter", return_value=adapter), \
+    with patch("training.train.LocalAdapter", return_value=adapter), \
          patch("training.train.VALIDATION_NUM_GAMES", 10):
         train_agent(
             agent_type="worst",
@@ -680,7 +681,7 @@ class TestTrainAgentValidation:
     """Tests for validation integration in train_agent()."""
 
     @patch("training.train.validate_worst_agent")
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_validation_failure_caught_gracefully(self, mock_checkpoint, mock_dqn, mock_adapter, mock_validate, tmp_path):
@@ -703,7 +704,7 @@ class TestTrainAgentValidation:
         assert "validation_games" not in metadata
 
     @patch("training.train.validate_worst_agent", return_value=0.3)
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_metadata_includes_validation_fields_for_worst(self, mock_checkpoint, mock_dqn, mock_adapter, mock_validate, tmp_path):
@@ -721,7 +722,7 @@ class TestTrainAgentValidation:
         assert metadata["validation_win_rate"] == 0.3
         assert metadata["validation_games"] == VALIDATION_NUM_GAMES
 
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_metadata_no_validation_fields_for_best(self, mock_checkpoint, mock_dqn, mock_adapter, tmp_path):
@@ -740,7 +741,7 @@ class TestTrainAgentValidation:
         assert "validation_games" not in metadata
 
     @patch("training.train.validate_worst_agent")
-    @patch("training.train.RESTAdapter")
+    @patch("training.train.LocalAdapter")
     @patch("training.train.DQN")
     @patch("training.train.CheckpointCallback")
     def test_metadata_no_validation_fields_when_validation_fails(self, mock_checkpoint, mock_dqn, mock_adapter, mock_validate, tmp_path):
@@ -768,7 +769,7 @@ def test_integration_load_agent(tmp_path):
     adapter = _mock_adapter_for_integration()
     output_path = str(tmp_path / "best_agent_roundtrip")
 
-    with patch("training.train.RESTAdapter", return_value=adapter):
+    with patch("training.train.LocalAdapter", return_value=adapter):
         train_agent(
             agent_type="best",
             total_timesteps=100,
