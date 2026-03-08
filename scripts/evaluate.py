@@ -7,7 +7,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from seed import set_all_seeds
 from evaluation import run_evaluation
 
 
@@ -16,12 +15,12 @@ def main() -> None:
     parser.add_argument(
         "--agent1",
         required=True,
-        help="Path to trained model or 'random' for engine's built-in player.",
+        help="Path to trained model or 'advanced' or 'random' for engine's built-in strategies.",
     )
     parser.add_argument(
         "--agent2",
         required=True,
-        help="Path to trained model or 'random' for engine's built-in player.",
+        help="Path to trained model or 'advanced' or 'random' for engine's built-in strategies.",
     )
     parser.add_argument(
         "--games",
@@ -47,8 +46,6 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(message)s",
     )
-
-    set_all_seeds(args.seed)
 
     csv_path = run_evaluation(
         agent1=args.agent1,

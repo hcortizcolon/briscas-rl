@@ -4,11 +4,13 @@ import pytest
 
 from gym_env.engine_adapter import Card, EngineAdapter, GameState, PlayerInfo, TrickCard
 from gym_env.local_adapter import (
+    STRATEGIES,
     BriscasGame,
     Card as EngineCard,
     LocalAdapter,
     Suit,
     _compare_cards,
+    _random_choose_card_index,
     _trick_winner,
 )
 from gym_env.briscas_env import BriscasEnv
@@ -73,6 +75,18 @@ class TestBriscasGame:
         assert g.game_over is False
         assert g.current_player in (0, 1)
 
+    def test_strategy_default_is_advanced(self):
+        g = BriscasGame()
+        assert g._strategy is STRATEGIES["advanced"]
+
+    def test_strategy_random(self):
+        g = BriscasGame(strategy="random")
+        assert g._strategy is STRATEGIES["random"]
+
+    def test_invalid_strategy_raises(self):
+        with pytest.raises(KeyError):
+            BriscasGame(strategy="nonexistent")
+
     def test_play_and_resolve(self):
         g = BriscasGame()
         g.remove_and_play(0, 0)
@@ -120,6 +134,38 @@ class TestBriscasGame:
 # ---------------------------------------------------------------------------
 # LocalAdapter interface tests
 # ---------------------------------------------------------------------------
+
+
+class TestRandomStrategy:
+    """Test _random_choose_card_index and random strategy through BriscasGame."""
+
+    def test_random_returns_valid_index(self):
+        hand = [EngineCard(1, Suit.OROS), EngineCard(3, Suit.COPAS), EngineCard(7, Suit.BASTOS)]
+        for _ in range(20):
+            idx = _random_choose_card_index(hand)
+            assert 0 <= idx <= 2
+
+    def test_random_single_card_hand(self):
+        hand = [EngineCard(1, Suit.OROS)]
+        idx = _random_choose_card_index(hand)
+        assert idx == 0
+
+    def test_random_strategy_full_game_completes(self):
+        g = BriscasGame(strategy="random")
+        while not g.game_over:
+            p = g.current_player
+            g.remove_and_play(p, 0)
+            if not g.is_trick_complete():
+                g.remove_and_play(1 - p, 0)
+            g.resolve_trick()
+        assert g.game_over
+        assert g.score(0) + g.score(1) == 120
+
+    def test_adapter_with_random_strategy(self):
+        adapter = LocalAdapter(strategy="random")
+        state = adapter.new_game()
+        assert isinstance(state, GameState)
+        assert not state.game_over
 
 
 class TestLocalAdapterInterface:

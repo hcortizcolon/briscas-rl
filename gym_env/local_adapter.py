@@ -105,8 +105,13 @@ def _trick_winner(trick: list[tuple[int, Card]], trump_suit: Suit) -> tuple[int,
 
 
 # ---------------------------------------------------------------------------
-# AI strategy (reimplements AdvancedStrategy from lets-play-brisca)
+# AI strategies
 # ---------------------------------------------------------------------------
+
+def _random_choose_card_index(hand: list[Card], **_kwargs) -> int:
+    """Pick a random card from the hand."""
+    return random.randint(0, len(hand) - 1)
+
 
 def _ai_choose_card_index(
     hand: list[Card],
@@ -166,10 +171,16 @@ def _ai_follow(hand: list[Card], trick: list[tuple[int, Card]], trump_suit: Suit
 # Game object
 # ---------------------------------------------------------------------------
 
+STRATEGIES = {
+    "advanced": _ai_choose_card_index,
+    "random": _random_choose_card_index,
+}
+
+
 class BriscasGame:
     """Two-player Briscas game (player 0 = RL agent, player 1 = AI)."""
 
-    def __init__(self) -> None:
+    def __init__(self, strategy: str = "advanced") -> None:
         # Build and shuffle deck
         cards = [Card(rank, suit) for suit in Suit for rank in VALID_RANKS]
         random.shuffle(cards)
@@ -189,6 +200,7 @@ class BriscasGame:
         self.current_player: int = random.randint(0, 1)
         self.round_number: int = 1
         self.game_over: bool = False
+        self._strategy = STRATEGIES[strategy]
 
     # -- low-level operations used by the adapter --
 
@@ -212,11 +224,11 @@ class BriscasGame:
             self.round_number += 1
 
     def ai_choose_card_index(self) -> int:
-        return _ai_choose_card_index(
-            self.hands[1],
-            self.current_trick,
-            self.trump_card.suit,
-            len(self.deck),
+        return self._strategy(
+            hand=self.hands[1],
+            trick=self.current_trick,
+            trump_suit=self.trump_card.suit,
+            deck_remaining=len(self.deck),
         )
 
     def score(self, player_idx: int) -> int:
@@ -247,11 +259,12 @@ class BriscasGame:
 class LocalAdapter(EngineAdapter):
     """Runs the Briscas game engine in-process (no HTTP)."""
 
-    def __init__(self) -> None:
+    def __init__(self, strategy: str = "advanced") -> None:
         self._game: BriscasGame | None = None
+        self._strategy = strategy
 
     def new_game(self) -> GameState:
-        self._game = BriscasGame()
+        self._game = BriscasGame(strategy=self._strategy)
         return self._serialize()
 
     def play_card(self, card_index: int) -> GameState:
