@@ -47,6 +47,6 @@ development_status:
   epic-2-retrospective: optional
 
   epic-3: in-progress
-  3-1-run-evaluation-matchups: ready-for-dev
+  3-1-run-evaluation-matchups: done
   3-2-summary-statistics-and-analysis: backlog
   epic-3-retrospective: optional

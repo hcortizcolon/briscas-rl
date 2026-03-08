@@ -656,3 +656,43 @@ class TestGameResultInfo:
         env.reset()
         _, _, _, _, info = env.step(0)
         assert "game_result" not in info
+
+
+class TestPointScoresInInfo:
+    """Test info contains agent_points and opponent_points at terminal state."""
+
+    def test_points_present_on_terminal(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(80, 40), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert info["agent_points"] == 80
+        assert info["opponent_points"] == 40
+
+    def test_points_not_present_mid_game(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        adapter.play_card.return_value = _state(game_over=False, is_your_turn=True)
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert "agent_points" not in info
+        assert "opponent_points" not in info
+
+    def test_points_on_draw(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state()
+        terminal = _state(
+            hand=[], game_over=True, players=_players(60, 60), is_your_turn=False
+        )
+        adapter.play_card.return_value = terminal
+        env = BriscasEnv(adapter=adapter)
+        env.reset()
+        _, _, _, _, info = env.step(0)
+        assert info["agent_points"] == 60
+        assert info["opponent_points"] == 60

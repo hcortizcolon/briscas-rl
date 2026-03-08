@@ -70,6 +70,11 @@ class BriscasEnv(gymnasium.Env):
                 info["game_result"] = "loss"
             else:
                 info["game_result"] = "draw"
+            for p in self._state.players:
+                if p.is_human:
+                    info["agent_points"] = p.score
+                else:
+                    info["opponent_points"] = p.score
             reward = raw_reward * self.reward_scale
             terminated = True
         else:
