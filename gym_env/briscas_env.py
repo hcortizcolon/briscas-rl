@@ -47,7 +47,14 @@ class BriscasEnv(gymnasium.Env):
         self._state = self._adapter.new_game()
         self._game_active = True
         self._cards_seen = set()
-        return self._get_observation(), {}
+        info = {"first_player": 0 if self._state.is_your_turn else 1}
+
+        # If AI goes first, let it play before returning
+        if not self._state.is_your_turn:
+            self._state = self._adapter.process_ai_turn()
+            self._update_cards_seen(self._state)
+
+        return self._get_observation(), info
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         hand_size = len(self._state.hand)

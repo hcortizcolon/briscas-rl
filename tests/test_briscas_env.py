@@ -658,6 +658,46 @@ class TestGameResultInfo:
         assert "game_result" not in info
 
 
+class TestFirstPlayerInfo:
+    """Test reset() returns first_player in info and handles AI-goes-first."""
+
+    def test_first_player_zero_when_agent_leads(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state(is_your_turn=True)
+        env = BriscasEnv(adapter=adapter)
+        _, info = env.reset()
+        assert info["first_player"] == 0
+        adapter.process_ai_turn.assert_not_called()
+
+    def test_first_player_one_when_ai_leads(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state(is_your_turn=False)
+        after_ai = _state(
+            trick=[TrickCard(player="ai", card=_card(3, "Copas", 10))],
+            is_your_turn=True,
+        )
+        adapter.process_ai_turn.return_value = after_ai
+        env = BriscasEnv(adapter=adapter)
+        obs, info = env.reset()
+        assert info["first_player"] == 1
+        adapter.process_ai_turn.assert_called_once()
+        # AI's lead card visible in trick slot
+        assert obs[5] == float(encode_card(_card(3, "Copas", 10)))
+
+    def test_ai_lead_card_tracked_in_bitmap(self):
+        adapter = MagicMock(spec=EngineAdapter)
+        adapter.new_game.return_value = _state(is_your_turn=False)
+        after_ai = _state(
+            trick=[TrickCard(player="ai", card=_card(1, "Oros", 11))],
+            is_your_turn=True,
+        )
+        adapter.process_ai_turn.return_value = after_ai
+        env = BriscasEnv(adapter=adapter)
+        obs, _ = env.reset()
+        # Oros 1 = card ID 0
+        assert obs[BITMAP_START + 0] == 1.0
+
+
 class TestPointScoresInInfo:
     """Test info contains agent_points and opponent_points at terminal state."""
 

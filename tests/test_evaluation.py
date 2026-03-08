@@ -105,22 +105,37 @@ class TestRunEvaluationGames:
     @patch("evaluation.evaluate.BriscasEnv")
     @patch("evaluation.evaluate.LocalAdapter")
     @patch("evaluation.evaluate.load_agent")
-    def test_first_player_always_zero(self, mock_load, mock_adapter_cls, mock_env_cls, tmp_path):
+    def test_first_player_recorded_from_env(self, mock_load, mock_adapter_cls, mock_env_cls, tmp_path):
+        """first_player in CSV reflects actual game state, not hardcoded 0."""
         model = _mock_model()
         mock_load.return_value = (model, {})
 
-        resets, steps = _mock_env_step_sequence(5)
+        obs = np.zeros(50, dtype=np.float32)
+        # Game 0: model first, Game 1: AI first
+        resets = [
+            (obs, {"first_player": 0}),
+            (obs, {"first_player": 1}),
+        ]
+        steps = []
+        for _ in range(2):
+            steps.append((obs, 0.0, False, False, {}))
+            steps.append((
+                obs, 1.0, True, False,
+                {"game_result": "win", "agent_points": 70, "opponent_points": 50},
+            ))
         mock_env = MagicMock()
         mock_env.reset.side_effect = resets
         mock_env.step.side_effect = steps
         mock_env_cls.return_value = mock_env
 
-        csv_path = run_evaluation("models/best.zip", "random", 5, 42, output_dir=str(tmp_path))
+        # agent1=model, agent2=random → model first_player=0 maps to csv 0, AI first maps to csv 1
+        csv_path = run_evaluation("models/best.zip", "random", 2, 42, output_dir=str(tmp_path))
 
         with open(csv_path) as f:
             reader = csv.DictReader(f)
-            for row in reader:
-                assert row["first_player"] == "0"
+            rows = list(reader)
+        assert rows[0]["first_player"] == "0"
+        assert rows[1]["first_player"] == "1"
 
     @patch("evaluation.evaluate.BriscasEnv")
     @patch("evaluation.evaluate.LocalAdapter")

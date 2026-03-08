@@ -46,7 +46,6 @@ def run_evaluation(
     model, _metadata = load_agent(model_path)
 
     set_all_seeds(seed)
-    logger.info("First-player alternation not supported — model always plays first")
 
     adapter = LocalAdapter()
     env = BriscasEnv(adapter=adapter, reward_scale=1.0)
@@ -54,14 +53,19 @@ def run_evaluation(
     results = []
     try:
         for game_id in range(num_games):
-            obs, _ = env.reset()
+            obs, reset_info = env.reset()
+            model_went_first = reset_info.get("first_player", 0) == 0
+            if model_is_agent2:
+                csv_first_player = 1 if model_went_first else 0
+            else:
+                csv_first_player = 0 if model_went_first else 1
+
             done = False
             while not done:
                 action, _states = model.predict(obs, deterministic=True)
                 obs, _reward, terminated, truncated, info = env.step(int(action.item()))
                 done = terminated or truncated
 
-            # The model always plays as agent (is_human=True) in BriscasEnv
             model_points = info["agent_points"]
             random_points = info["opponent_points"]
 
@@ -76,7 +80,7 @@ def run_evaluation(
                 "game_id": game_id,
                 "agent1_points": a1_points,
                 "agent2_points": a2_points,
-                "first_player": 0,
+                "first_player": csv_first_player,
                 "point_differential": a1_points - a2_points,
             })
     finally:

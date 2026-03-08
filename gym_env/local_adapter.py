@@ -186,7 +186,7 @@ class BriscasGame:
 
         self.won_cards: list[list[Card]] = [[], []]
         self.current_trick: list[tuple[int, Card]] = []
-        self.current_player: int = 0
+        self.current_player: int = random.randint(0, 1)
         self.round_number: int = 1
         self.game_over: bool = False
 
