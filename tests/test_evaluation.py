@@ -57,9 +57,10 @@ class TestRunEvaluationValidation:
         with pytest.raises(ValueError, match="At least one agent must be a trained model"):
             run_evaluation("random", "advanced", 10, 42, output_dir=str(tmp_path))
 
-    def test_no_engine_strategy_raises(self, tmp_path):
-        with pytest.raises(ValueError, match="Exactly one agent must be an engine strategy"):
-            run_evaluation("models/a.zip", "models/b.zip", 10, 42, output_dir=str(tmp_path))
+    def test_two_models_accepted(self, tmp_path):
+        """Model-vs-model no longer raises — it's supported."""
+        # This just tests validation passes; actual game play tested in TestModelVsModel
+        pass  # Covered by TestModelVsModel tests
 
     def test_num_games_zero_raises(self, tmp_path):
         with pytest.raises(ValueError, match="num_games must be a positive integer"):
@@ -538,6 +539,53 @@ class TestRunEvaluationPrintsStats:
         assert "Agent 1 (best)" in captured.out
         assert "Agent 2 (random)" in captured.out
         assert "Total Games: 3" in captured.out
+
+
+# --- Model vs Model tests ---
+
+class TestModelVsModel:
+    """Test model-vs-model evaluation."""
+
+    @pytest.mark.integration
+    def test_model_vs_model_integration(self, tmp_path):
+        """Train two minimal models and pit them against each other."""
+        from stable_baselines3 import DQN
+        from gym_env.briscas_env import BriscasEnv
+        from gym_env.local_adapter import LocalAdapter
+
+        adapter = LocalAdapter()
+        env = BriscasEnv(adapter=adapter)
+        try:
+            model1 = DQN("MlpPolicy", env, verbose=0, learning_starts=50, seed=42)
+            model1.learn(total_timesteps=100)
+            path1 = str(tmp_path / "model1")
+            model1.save(path1)
+
+            model2 = DQN("MlpPolicy", env, verbose=0, learning_starts=50, seed=99)
+            model2.learn(total_timesteps=100)
+            path2 = str(tmp_path / "model2")
+            model2.save(path2)
+        finally:
+            env.close()
+
+        csv_path = run_evaluation(
+            agent1=path1, agent2=path2, num_games=10, seed=42,
+            output_dir=str(tmp_path / "results"),
+        )
+
+        assert os.path.isfile(csv_path)
+        with open(csv_path) as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert len(rows) == 10
+        for row in rows:
+            a1 = int(row["agent1_points"])
+            a2 = int(row["agent2_points"])
+            assert 0 <= a1 <= 120
+            assert 0 <= a2 <= 120
+            assert a1 + a2 == 120
+            assert int(row["point_differential"]) == a1 - a2
+            assert row["first_player"] in ("0", "1")
 
 
 # --- Integration test ---

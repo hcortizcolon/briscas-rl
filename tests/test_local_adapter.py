@@ -234,6 +234,46 @@ class TestLocalAdapterProcessAI:
         assert ai_state.is_your_turn is True
 
 
+class TestLocalAdapterOpponentMethods:
+    """Test get_opponent_hand() and play_opponent_card() for model-vs-model."""
+
+    def test_get_opponent_hand_returns_3_cards(self):
+        adapter = LocalAdapter()
+        adapter.new_game()
+        opp_hand = adapter.get_opponent_hand()
+        assert len(opp_hand) == 3
+        for card in opp_hand:
+            assert isinstance(card, Card)
+
+    def test_play_opponent_card_reduces_hand(self):
+        adapter = LocalAdapter()
+        state = adapter.new_game()
+        # Make it player 1's turn by having player 0 play first
+        if state.is_your_turn:
+            adapter.play_card(0)
+        opp_hand_before = adapter.get_opponent_hand()
+        adapter.play_opponent_card(0)
+        opp_hand_after = adapter.get_opponent_hand()
+        assert len(opp_hand_after) == len(opp_hand_before) - 1
+
+    def test_play_opponent_card_adds_to_trick(self):
+        adapter = LocalAdapter()
+        state = adapter.new_game()
+        if state.is_your_turn:
+            adapter.play_card(0)
+        state = adapter.play_opponent_card(0)
+        opponent_cards = [tc for tc in state.trick if tc.player == "Claude"]
+        assert len(opponent_cards) >= 1
+
+    def test_play_opponent_card_noop_when_not_turn(self):
+        adapter = LocalAdapter()
+        state = adapter.new_game()
+        if state.is_your_turn:
+            # It's player 0's turn, so play_opponent_card should be a no-op
+            state2 = adapter.play_opponent_card(0)
+            assert len(state2.trick) == 0
+
+
 class TestLocalAdapterDeleteGame:
     def test_delete_cleans_up(self):
         adapter = LocalAdapter()

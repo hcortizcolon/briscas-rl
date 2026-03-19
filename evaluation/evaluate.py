@@ -1,4 +1,4 @@
-"""Evaluation module — run matchups between a trained agent and a built-in engine strategy."""
+"""Evaluation module — run matchups between agents (model vs engine or model vs model)."""
 
 import csv
 import logging
@@ -7,10 +7,13 @@ import statistics
 
 from gym_env.briscas_env import BriscasEnv
 from gym_env.local_adapter import LocalAdapter
+from gym_env.observation import build_observation, encode_card, sorted_hand_index
 from seed import set_all_seeds
 from training.train import load_agent
 
 logger = logging.getLogger(__name__)
+
+ENGINE_STRATEGIES = ("advanced", "random")
 
 
 def run_evaluation(
@@ -25,20 +28,53 @@ def run_evaluation(
     if num_games <= 0:
         raise ValueError("num_games must be a positive integer")
 
-    # Validate agent constraints
-    engine_strategies = ("advanced", "random")
-    agents = [agent1, agent2]
-    engine_agents = [a for a in agents if a in engine_strategies]
-    if len(engine_agents) == 2:
-        raise ValueError("At least one agent must be a trained model")
-    if len(engine_agents) == 0:
-        raise ValueError(
-            "Exactly one agent must be an engine strategy ('advanced' or 'random') — "
-            "model-vs-model is not supported (engine API does not expose opponent hand)"
-        )
+    a1_is_engine = agent1 in ENGINE_STRATEGIES
+    a2_is_engine = agent2 in ENGINE_STRATEGIES
 
-    # Determine which agent is the model
-    if agent1 in engine_strategies:
+    if a1_is_engine and a2_is_engine:
+        raise ValueError("At least one agent must be a trained model")
+
+    set_all_seeds(seed)
+
+    if a1_is_engine or a2_is_engine:
+        results = _play_model_vs_engine(agent1, agent2, num_games)
+    else:
+        results = _play_model_vs_model(agent1, agent2, num_games)
+
+    # Write CSV
+    agent1_name = _extract_agent_name(agent1)
+    agent2_name = _extract_agent_name(agent2)
+    if output_path:
+        csv_path = output_path
+        parent = os.path.dirname(csv_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+        filename = f"{agent1_name}_vs_{agent2_name}_{num_games}g_{seed}s.csv"
+        csv_path = os.path.join(output_dir, filename)
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["game_id", "agent1_points", "agent2_points", "first_player", "point_differential"]
+        )
+        writer.writeheader()
+        writer.writerows(results)
+
+    logger.info(
+        "Evaluation complete: %d games | %s vs %s | Output: %s",
+        num_games, agent1_name, agent2_name, csv_path,
+    )
+
+    stats = compute_summary_statistics(results)
+    print_summary_statistics(stats, agent1_name, agent2_name)
+
+    return csv_path
+
+
+def _play_model_vs_engine(agent1: str, agent2: str, num_games: int) -> list[dict]:
+    """Play games between a trained model and an engine strategy."""
+    if agent1 in ENGINE_STRATEGIES:
         model_path = agent2
         model_is_agent2 = True
         strategy = agent1
@@ -48,9 +84,6 @@ def run_evaluation(
         strategy = agent2
 
     model, _metadata = load_agent(model_path)
-
-    set_all_seeds(seed)
-
     adapter = LocalAdapter(strategy=strategy)
     env = BriscasEnv(adapter=adapter, reward_scale=1.0)
 
@@ -90,35 +123,66 @@ def run_evaluation(
     finally:
         env.close()
 
-    # Write CSV
-    agent1_name = _extract_agent_name(agent1)
-    agent2_name = _extract_agent_name(agent2)
-    if output_path:
-        csv_path = output_path
-        parent = os.path.dirname(csv_path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-    else:
-        os.makedirs(output_dir, exist_ok=True)
-        filename = f"{agent1_name}_vs_{agent2_name}_{num_games}g_{seed}s.csv"
-        csv_path = os.path.join(output_dir, filename)
+    return results
 
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["game_id", "agent1_points", "agent2_points", "first_player", "point_differential"]
-        )
-        writer.writeheader()
-        writer.writerows(results)
 
-    logger.info(
-        "Evaluation complete: %d games | %s vs %s | Output: %s",
-        num_games, agent1_name, agent2_name, csv_path,
-    )
+def _play_model_vs_model(agent1: str, agent2: str, num_games: int) -> list[dict]:
+    """Play games between two trained models."""
+    model1, _ = load_agent(agent1)
+    model2, _ = load_agent(agent2)
 
-    stats = compute_summary_statistics(results)
-    print_summary_statistics(stats, agent1_name, agent2_name)
+    adapter = LocalAdapter(strategy="random")
+    results = []
 
-    return csv_path
+    for game_id in range(num_games):
+        state = adapter.new_game()
+        cards_seen: set[int] = set()
+        first_player = 0 if state.is_your_turn else 1
+
+        while True:
+            state = adapter.get_state()
+            if state.game_over:
+                break
+
+            if state.is_your_turn:
+                obs = build_observation(
+                    hand=state.hand, trump=state.trump, trick=state.trick,
+                    cards_seen=cards_seen, deck_remaining=state.deck_remaining,
+                    agent_score=state.players[0].score,
+                    opponent_score=state.players[1].score,
+                )
+                action, _ = model1.predict(obs, deterministic=True)
+                mapped = int(action.item()) % len(state.hand)
+                engine_idx = sorted_hand_index(state.hand, mapped)
+                play_state = adapter.play_card(engine_idx)
+            else:
+                opp_hand = adapter.get_opponent_hand()
+                obs = build_observation(
+                    hand=opp_hand, trump=state.trump, trick=state.trick,
+                    cards_seen=cards_seen, deck_remaining=state.deck_remaining,
+                    agent_score=state.players[1].score,
+                    opponent_score=state.players[0].score,
+                )
+                action, _ = model2.predict(obs, deterministic=True)
+                mapped = int(action.item()) % len(opp_hand)
+                engine_idx = sorted_hand_index(opp_hand, mapped)
+                play_state = adapter.play_opponent_card(engine_idx)
+
+            for tc in play_state.trick:
+                cards_seen.add(encode_card(tc.card))
+
+        a1_points = state.players[0].score
+        a2_points = state.players[1].score
+        results.append({
+            "game_id": game_id,
+            "agent1_points": a1_points,
+            "agent2_points": a2_points,
+            "first_player": first_player,
+            "point_differential": a1_points - a2_points,
+        })
+
+    adapter.delete_game()
+    return results
 
 
 def compute_summary_statistics(results: list[dict]) -> dict:

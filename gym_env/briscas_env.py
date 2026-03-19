@@ -7,19 +7,11 @@ import numpy as np
 
 from gym_env.engine_adapter import EngineAdapter, GameState
 from gym_env.observation import (
-    OBSERVATION_SIZE,
     TOTAL_POINTS,
-    BITMAP_START,
-    BITMAP_END,
-    TRUMP_ID,
-    TRUMP_SUIT,
-    TRICK_START,
-    DECK_REMAINING,
-    AGENT_SCORE,
-    OPPONENT_SCORE,
-    SUIT_INDEX,
+    build_observation,
     build_observation_space,
     encode_card,
+    sorted_hand_index,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,9 +84,7 @@ class BriscasEnv(gymnasium.Env):
 
     def _sorted_hand_index(self, sorted_idx: int) -> int:
         """Map an index in the sorted hand back to the engine's hand index."""
-        hand = self._state.hand
-        order = sorted(range(len(hand)), key=lambda i: encode_card(hand[i]))
-        return order[sorted_idx]
+        return sorted_hand_index(self._state.hand, sorted_idx)
 
     def _execute_turn(self, card_index: int) -> GameState:
         """Play card and loop until it's our turn or game over.
@@ -123,39 +113,23 @@ class BriscasEnv(gymnasium.Env):
 
     def _get_observation(self) -> np.ndarray:
         """Single source of truth for observation encoding."""
-        obs = np.zeros(OBSERVATION_SIZE, dtype=np.float32)
         state = self._state
-
-        # Hand cards (sorted by card ID, padded with -1)
-        obs[0:3] = -1.0
-        hand_ids = sorted(encode_card(c) for c in state.hand)
-        for i, cid in enumerate(hand_ids):
-            obs[i] = cid
-
-        # Trump card and suit
-        obs[TRUMP_ID] = encode_card(state.trump)
-        obs[TRUMP_SUIT] = SUIT_INDEX[state.trump.suit]
-
-        # Trick cards
-        obs[TRICK_START:TRICK_START + 2] = -1.0
-        for i, tc in enumerate(state.trick):
-            obs[TRICK_START + i] = encode_card(tc.card)
-
-        # Cards-played bitmap (40 binary flags)
-        for cid in self._cards_seen:
-            obs[BITMAP_START + cid] = 1.0
-
-        # Deck remaining
-        obs[DECK_REMAINING] = state.deck_remaining
-
-        # Agent and opponent scores
+        agent_score = 0
+        opponent_score = 0
         for p in state.players:
             if p.is_human:
-                obs[AGENT_SCORE] = p.score
+                agent_score = p.score
             else:
-                obs[OPPONENT_SCORE] = p.score
-
-        return obs
+                opponent_score = p.score
+        return build_observation(
+            hand=state.hand,
+            trump=state.trump,
+            trick=state.trick,
+            cards_seen=self._cards_seen,
+            deck_remaining=state.deck_remaining,
+            agent_score=agent_score,
+            opponent_score=opponent_score,
+        )
 
     def _update_cards_seen(self, state: GameState) -> None:
         """Add trick cards to _cards_seen set."""

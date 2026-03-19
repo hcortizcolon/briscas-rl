@@ -293,6 +293,23 @@ class LocalAdapter(EngineAdapter):
     def get_state(self) -> GameState:
         return self._serialize()
 
+    def get_opponent_hand(self) -> list[AdapterCard]:
+        """Return player 1's hand as adapter cards (for model-vs-model evaluation)."""
+        return [self._to_adapter_card(c) for c in self._game.hands[1]]
+
+    def play_opponent_card(self, card_index: int) -> GameState:
+        """Play a card for player 1 using an external decision (for model-vs-model)."""
+        g = self._game
+        if g.current_player != 1:
+            return self._serialize()
+        g.remove_and_play(1, card_index)
+        if not g.is_trick_complete():
+            g.current_player = 0
+        state = self._serialize()
+        if g.is_trick_complete():
+            g.resolve_trick()
+        return state
+
     def delete_game(self) -> None:
         self._game = None
 

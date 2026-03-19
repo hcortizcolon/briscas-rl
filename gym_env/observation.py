@@ -3,7 +3,7 @@
 import gymnasium
 import numpy as np
 
-from gym_env.engine_adapter import Card
+from gym_env.engine_adapter import Card, TrickCard
 
 NUM_CARDS = 40
 TOTAL_POINTS = 120
@@ -84,3 +84,43 @@ def build_observation_space() -> gymnasium.spaces.Box:
     high[OPPONENT_SCORE] = TOTAL_POINTS
 
     return gymnasium.spaces.Box(low=low, high=high, dtype=np.float32)
+
+
+def build_observation(
+    hand: list[Card],
+    trump: Card,
+    trick: list[TrickCard],
+    cards_seen: set[int],
+    deck_remaining: int,
+    agent_score: int,
+    opponent_score: int,
+) -> np.ndarray:
+    """Build the 50-feature observation vector from raw game data."""
+    obs = np.zeros(OBSERVATION_SIZE, dtype=np.float32)
+
+    obs[0:3] = -1.0
+    hand_ids = sorted(encode_card(c) for c in hand)
+    for i, cid in enumerate(hand_ids):
+        obs[i] = cid
+
+    obs[TRUMP_ID] = encode_card(trump)
+    obs[TRUMP_SUIT] = SUIT_INDEX[trump.suit]
+
+    obs[TRICK_START:TRICK_START + 2] = -1.0
+    for i, tc in enumerate(trick):
+        obs[TRICK_START + i] = encode_card(tc.card)
+
+    for cid in cards_seen:
+        obs[BITMAP_START + cid] = 1.0
+
+    obs[DECK_REMAINING] = deck_remaining
+    obs[AGENT_SCORE] = agent_score
+    obs[OPPONENT_SCORE] = opponent_score
+
+    return obs
+
+
+def sorted_hand_index(hand: list[Card], sorted_idx: int) -> int:
+    """Map a sorted-hand index back to the engine's hand index."""
+    order = sorted(range(len(hand)), key=lambda i: encode_card(hand[i]))
+    return order[sorted_idx]
