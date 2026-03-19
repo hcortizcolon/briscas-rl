@@ -1,0 +1,8 @@
+{
+  "agent_type": "best",
+  "seed": 42,
+  "total_timesteps": 2000000,
+  "reward_type": "normalized_differential",
+  "timestamp": "2026-03-07T22:20:36.367833+00:00",
+  "resume_from": "models/best_agent_1000k"
+}

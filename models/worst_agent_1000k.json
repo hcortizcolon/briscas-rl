@@ -1,0 +1,10 @@
+{
+  "agent_type": "worst",
+  "seed": 42,
+  "total_timesteps": 1000000,
+  "reward_type": "normalized_differential",
+  "timestamp": "2026-03-08T12:32:38.508907+00:00",
+  "resume_from": "models/worst_agent_1000k",
+  "validation_win_rate": 0.086,
+  "validation_games": 1000
+}

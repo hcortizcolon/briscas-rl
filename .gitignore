@@ -5,5 +5,3 @@ __pycache__/
 
 # Trained models (retrain from seeds)
 models/checkpoints/
-models/*.zip
-models/*.json
